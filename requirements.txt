@@ -175,7 +175,7 @@ sqlalchemy==2.0.30
     #   sqlalchemy-crud-plus
 sqlalchemy-crud-plus==1.6.0
     # via fastapi-sqlalchemy-mysql
-starlette==0.37.2
+starlette==0.49.1
     # via fastapi
 typer==0.15.2
     # via fastapi-cli
