@@ -60,7 +60,7 @@ fastapi-limiter==0.1.6
     # via fastapi-sqlalchemy-mysql
 fastapi-pagination==0.12.24
     # via fastapi-sqlalchemy-mysql
-filelock==3.18.0
+filelock==3.20.1
     # via virtualenv
 greenlet==3.1.1 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
     # via sqlalchemy
