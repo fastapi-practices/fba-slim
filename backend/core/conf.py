@@ -100,25 +100,9 @@ class Settings(BaseSettings):
     # JWT
     JWT_USER_REDIS_PREFIX: str = 'fba:user'
 
-    # RBAC
-    RBAC_ROLE_MENU_MODE: bool = True
-    RBAC_ROLE_MENU_EXCLUDE: list[str] = [
-        'sys:monitor:redis',
-        'sys:monitor:server',
-    ]
-
     # Cookie
     COOKIE_REFRESH_TOKEN_KEY: str = 'fba_refresh_token'
     COOKIE_REFRESH_TOKEN_EXPIRE_SECONDS: int = 60 * 60 * 24 * 7  # 7 天
-
-    # 数据权限
-    DATA_PERMISSION_COLUMN_EXCLUDE: list[str] = [  # 排除允许进行数据过滤的 SQLA 模型列
-        'id',
-        'sort',
-        'del_flag',
-        'created_time',
-        'updated_time',
-    ]
 
     # CORS
     CORS_ALLOWED_ORIGINS: list[str] = [  # 末尾不带斜杠
