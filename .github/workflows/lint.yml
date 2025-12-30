@@ -1,0 +1,34 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    name: lint ${{ matrix.python-version }}
+    strategy:
+      matrix:
+        python-version: [ '3.10', '3.11', '3.12', '3.13', '3.14' ]
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          uv sync --only-group lint
+
+      - name: Run lint
+        run: |
+          source .venv/bin/activate
+          chmod 755 backend/scripts/lint.sh
+          ./backend/scripts/lint.sh

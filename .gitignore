@@ -1,0 +1,11 @@
+.idea/
+.vscode/
+.cursor/
+.DS_Store
+venv/
+.venv/
+.python-version
+.ruff_cache/
+.pytest_cache/
+.claude/
+.serena/

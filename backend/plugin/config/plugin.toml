@@ -1,0 +1,12 @@
+[plugin]
+summary = '参数配置'
+version = '0.0.2'
+description = '通常用于动态配置系统参数/前端工程数据展示'
+author = 'wu-clan'
+
+[app]
+extend = 'admin'
+
+[api.config]
+prefix = '/configs'
+tags = '系统参数配置'
