@@ -601,7 +601,7 @@ wheels = [
 ]
 
 [[package]]
-name = "fastapi-sqlalchemy-mysql"
+name = "fba-slim"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
