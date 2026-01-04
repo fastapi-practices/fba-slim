@@ -1,0 +1,236 @@
+networks:
+  fba_network:
+    name: fba_network
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.10.10.0/24
+
+volumes:
+  # 如果你是 mysql 用户，应将 fba_postgres 修改为 fba_mysql
+  fba_postgres:
+    name: fba_postgres
+  fba_redis:
+    name: fba_redis
+  fba_static:
+    name: fba_static
+  fba_static_upload:
+    name: fba_static_upload
+  fba_prometheus_data:
+    name: fba_prometheus_data
+
+services:
+  fba_server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: fba_server:latest
+    ports:
+      - "8001:8001"
+    container_name: fba_server
+    restart: always
+    environment:
+      - TZ=Asia/Shanghai
+    # 如果你是 mysql 用户，应将 fba_postgres 修改为 fba_mysql
+    depends_on:
+      - fba_postgres
+      - fba_redis
+    volumes:
+      - ./deploy/backend/docker-compose/.env.server:/fba/backend/.env
+      - fba_static:/fba/backend/app/static
+      - fba_static_upload:/fba/backend/static/upload
+    networks:
+      - fba_network
+    # 如果你是 mysql 用户，应将 fba_postgres:5432 修改为 fba_mysql:3306
+    command:
+      - bash
+      - -c
+      - |
+        wait-for-it -s fba_postgres:5432 -s fba_redis:6379 -t 300
+        supervisord -c /etc/supervisor/supervisord.conf
+        supervisorctl restart
+
+  fba_postgres:
+    image: postgres:16
+    ports:
+      - "${DOCKER_POSTGRES_MAP_PORT:-5432}:5432"
+    container_name: fba_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: fba
+      POSTGRES_PASSWORD: 123456
+      TZ: Asia/Shanghai
+    volumes:
+      - fba_postgres:/var/lib/postgresql/data
+    networks:
+      - fba_network
+
+#  # 如果你是 mysql 用户，应保留 fba_mysql 容器脚本并删除 fba_postgres 容器脚本
+#  fba_mysql:
+#    image: mysql:8.0.41
+#    ports:
+#      - "${DOCKER_MYSQL_MAP_PORT:-3306}:3306"
+#    container_name: fba_mysql
+#    restart: always
+#    environment:
+#      MYSQL_DATABASE: fba
+#      MYSQL_ROOT_PASSWORD: 123456
+#      TZ: Asia/Shanghai
+#    volumes:
+#      - fba_mysql:/var/lib/mysql
+#    networks:
+#      - fba_network
+#    command:
+#      --default-authentication-plugin=mysql_native_password
+#      --character-set-server=utf8mb4
+#      --collation-server=utf8mb4_general_ci
+#      --lower_case_table_names=1
+
+  fba_redis:
+    image: redis
+    ports:
+      - "${DOCKER_REDIS_MAP_PORT:-6379}:6379"
+    container_name: fba_redis
+    restart: always
+    environment:
+      - TZ=Asia/Shanghai
+    volumes:
+      - fba_redis:/data
+    networks:
+      - fba_network
+
+  # 【后端专用】
+  # 如果使用此容器，意味着你只需部署后端 API 服务，不需要前端
+  # 这与下面的 fba_ui 容器冲突，如果你选择使用 fba_ui 容器，你应该注释或删除 fba_nginx 容器脚本
+  fba_nginx:
+    image: nginx
+    ports:
+      - "8000:80"
+    container_name: fba_nginx
+    restart: always
+    depends_on:
+      - fba_server
+    volumes:
+      - ./deploy/backend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - fba_static:/www/fba_server/backend/static
+      - fba_static_upload:/www/fba_server/backend/static/upload
+    networks:
+      - fba_network
+
+#  # 如果服务器内存小于 4GB，CPU 小于四个内核
+#  # 建议通过前端工程单独构建此容器或在本地进行构建
+#  fba_ui:
+#    build:
+#      context: /root/fastapi_best_architecture_ui
+#      dockerfile: Dockerfile
+#    image: fba_ui:latest
+#    ports:
+#      - "80:80"
+#      - "443:443"
+#    container_name: fba_ui
+#    restart: always
+#    depends_on:
+#      - fba_server
+#    command:
+#      - nginx
+#      - -g
+#      - daemon off;
+#    volumes:
+#      # nginx https conf
+#      # 通过 docker 进行部署时，需要打开此配置项并确保<挂载到容器内的证书文件路径>配置
+#      # 与 nginx conf 中的 ssl 证书文件路径配置一致，如果你直接将 ssl 证书文件 cp
+#      # 到了 docker 容器内，则无需挂载证书文件，直接将它们注释或删除即可
+#      # local_ssl_pem_path：你在服务器存放 ssl pem 证书文件的路径，自行修改
+#      # local_ssl_key_path: 你在服务器存放 ssl key 证书文件的路径，自行修改
+#      # /etc/ssl/xxx.pem：挂载到容器内 ssl pem 证书文件的路径，自行修改
+#      # /etc/ssl/xxx.key：挂载到容器内 ssl key 证书文件的路径，自行修改
+#      - local_ssl_pem_path:/etc/ssl/xxx.pem
+#      - local_ssl_key_path:/etc/ssl/xxx.key
+#      - fba_static:/www/fba_server/backend/static
+#      - fba_static_upload:/www/fba_server/backend/static/upload
+#    networks:
+#      - fba_network
+
+  fba_loki:
+    image: grafana/loki
+    restart: always
+    ports:
+      - "3100:3100"
+    container_name: fba_loki
+    networks:
+      - fba_network
+    command: -config.file=/etc/loki/local-config.yaml
+
+  fba_prometheus:
+    image: prom/prometheus
+    restart: always
+    ports:
+      - "9090:9090"
+    container_name: fba_prometheus
+    depends_on:
+      - fba_loki
+    volumes:
+      - ./deploy/backend/grafana/fba_prometheus.yml:/workspace/fba_prometheus.yml
+      - fba_prometheus_data:/prometheus
+    networks:
+      - fba_network
+    command:
+      - --web.enable-remote-write-receiver
+      - --enable-feature=exemplar-storage
+      - --config.file=/workspace/fba_prometheus.yml
+
+  fba_alloy:
+    image: grafana/alloy
+    restart: always
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "12345:12345"
+    container_name: fba_alloy
+    depends_on:
+      - fba_loki
+    volumes:
+      - ./deploy/backend/grafana/fba_config.alloy:/etc/alloy/fba_config.alloy
+    networks:
+      - fba_network
+    command:
+      - run
+      - /etc/alloy/fba_config.alloy
+      - --server.http.listen-addr=0.0.0.0:12345
+
+  fba_tempo:
+    image: grafana/tempo:latest
+    restart: always
+    ports:
+      - "3200:3200"
+    expose:
+      - 4317
+      - 4318
+    container_name: fba_tempo
+    depends_on:
+      - fba_loki
+    volumes:
+      - ./deploy/backend/grafana/fba_tempo.yml:/etc/tempo/fba_tempo.yml
+    networks:
+      - fba_network
+    command:
+      - -config.file=/etc/tempo/fba_tempo.yml
+      - -auth.enabled=false
+
+  fba_grafana:
+    image: grafana/grafana
+    restart: always
+    ports:
+      - "3000:3000"
+    container_name: fba_grafana
+    depends_on:
+      - fba_loki
+      - fba_prometheus
+    volumes:
+      - ./deploy/backend/grafana/fba_grafana.ini:/etc/grafana/grafana.ini
+      - ./deploy/backend/grafana/dashboards/fba_server.json:/etc/grafana/dashboards/fba_server.json
+      - ./deploy/backend/grafana/fba_dashboards.yml:/etc/grafana/provisioning/dashboards/fba_dashboards.yml
+      - ./deploy/backend/grafana/fba_datasource.yml:/etc/grafana/provisioning/datasources/fba_datasource.yml
+    networks:
+      - fba_network

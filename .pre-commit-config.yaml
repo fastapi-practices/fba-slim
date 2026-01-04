@@ -1,0 +1,31 @@
+default_language_version:
+    python: '>= 3.10'
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: check-json
+      - id: check-yaml
+      - id: check-toml
+
+  - repo: https://github.com/charliermarsh/ruff-pre-commit
+    rev: v0.14.10
+    hooks:
+      - id: ruff-check
+        args:
+          # https://github.com/astral-sh/ruff-pre-commit/issues/64
+          - '--fix'
+          - '--unsafe-fixes'
+      - id: ruff-format
+
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.9.18
+    hooks:
+      - id: uv-lock
+      - id: uv-export
+        args:
+          - '-o'
+          - 'requirements.txt'
+          - '--no-hashes'
