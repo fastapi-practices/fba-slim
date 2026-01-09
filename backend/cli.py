@@ -89,10 +89,6 @@ def setup_env_file() -> bool:
         settings.REDIS_DATABASE = redis_db
         env_content = re.sub(r"TOKEN_SECRET_KEY='[^']*'", f"TOKEN_SECRET_KEY='{token_secret}'", env_content)
         settings.TOKEN_SECRET_KEY = token_secret
-        env_content = re.sub(
-            r"OPERA_LOG_ENCRYPT_SECRET_KEY='[^']*'", f"OPERA_LOG_ENCRYPT_SECRET_KEY='{opera_log_secret}'", env_content
-        )
-        settings.OPERA_LOG_ENCRYPT_SECRET_KEY = opera_log_secret
 
         Path(ENV_FILE_PATH).write_text(env_content, encoding='utf-8')
         console.print('.env 文件创建成功', style='green')
