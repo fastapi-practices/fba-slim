@@ -73,22 +73,14 @@ class Settings(BaseSettings):
     TOKEN_REFRESH_EXPIRE_SECONDS: int = 60 * 60 * 24 * 7  # 7 天
     TOKEN_REDIS_PREFIX: str = 'fba:token'
     TOKEN_EXTRA_INFO_REDIS_PREFIX: str = 'fba:token_extra_info'
-    TOKEN_ONLINE_REDIS_PREFIX: str = 'fba:token_online'
     TOKEN_REFRESH_REDIS_PREFIX: str = 'fba:refresh_token'
     TOKEN_REQUEST_PATH_EXCLUDE: list[str] = [  # JWT / RBAC 路由白名单
         f'{FASTAPI_API_V1_PATH}/auth/login',
     ]
     TOKEN_REQUEST_PATH_EXCLUDE_PATTERN: list[Pattern[str]] = [  # JWT / RBAC 路由白名单（正则）
-        rf'^{FASTAPI_API_V1_PATH}/monitors/(redis|server)$',
     ]
 
     # 用户安全
-    USER_LOCK_REDIS_PREFIX: str = 'fba:user:lock'
-    USER_LOCK_THRESHOLD: int = 5  # 用户密码错误锁定阈值，0 表示禁用锁定
-    USER_LOCK_SECONDS: int = 60 * 5  # 5 分钟
-    USER_PASSWORD_EXPIRY_DAYS: int = 365  # 用户密码有效期，0 表示永不过期
-    USER_PASSWORD_REMINDER_DAYS: int = 7  # 用户密码到期提醒，0 表示不提醒
-    USER_PASSWORD_HISTORY_CHECK_COUNT: int = 3
     USER_PASSWORD_MIN_LENGTH: int = 6
     USER_PASSWORD_MAX_LENGTH: int = 32
     USER_PASSWORD_REQUIRE_SPECIAL_CHAR: bool = False
@@ -97,7 +89,6 @@ class Settings(BaseSettings):
     LOGIN_CAPTCHA_ENABLED: bool = True
     LOGIN_CAPTCHA_REDIS_PREFIX: str = 'fba:login:captcha'
     LOGIN_CAPTCHA_EXPIRE_SECONDS: int = 60 * 5  # 5 分钟
-    LOGIN_FAILURE_PREFIX: str = 'fba:login:failure'
 
     # JWT
     JWT_USER_REDIS_PREFIX: str = 'fba:user'
@@ -172,9 +163,6 @@ class Settings(BaseSettings):
         '/redoc',
         '/openapi',
         f'{FASTAPI_API_V1_PATH}/auth/login/swagger',
-        f'{FASTAPI_API_V1_PATH}/oauth2/github/callback',
-        f'{FASTAPI_API_V1_PATH}/oauth2/google/callback',
-        f'{FASTAPI_API_V1_PATH}/oauth2/linux-do/callback',
     ]
     OPERA_LOG_REDACT_KEYS: list[str] = [
         'password',

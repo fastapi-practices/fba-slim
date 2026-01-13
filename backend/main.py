@@ -2,7 +2,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.text import Text
 
 from backend.core.registrar import register_app
-from backend.plugin.tools import get_plugins, install_requirements
+from backend.plugin.requirements import get_plugins, install_requirements
 from backend.utils.console import console
 from backend.utils.timezone import timezone
 

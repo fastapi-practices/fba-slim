@@ -1,5 +1,3 @@
-import random
-
 from typing import Any
 
 from fastapi import Request
@@ -73,9 +71,9 @@ class UserService:
         """
         if await user_dao.get_by_username(db, obj.username):
             raise errors.ConflictError(msg='用户名已注册')
-        obj.nickname = obj.nickname or f'#{random.randrange(88888, 99999)}'
         if not obj.password:
             raise errors.RequestError(msg='密码不允许为空')
+        obj.nickname = obj.nickname or obj.username
         await user_dao.add(db, obj)
 
     @staticmethod
@@ -172,7 +170,7 @@ class UserService:
         if not user:
             raise errors.NotFoundError(msg='用户不存在')
 
-        await validate_new_password(db, user.id, password)
+        validate_new_password(password)
         count = await user_dao.reset_password(db, user.id, password)
 
         await user_dao.update_password_changed_time(db, user.id)
@@ -253,7 +251,7 @@ class UserService:
         if obj.new_password != obj.confirm_password:
             raise errors.RequestError(msg='两次密码输入不一致')
 
-        await validate_new_password(db, user_id, obj.new_password)
+        validate_new_password(obj.new_password)
         count = await user_dao.reset_password(db, user_id, obj.new_password)
 
         await user_dao.update_password_changed_time(db, user.id)

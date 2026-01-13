@@ -31,9 +31,11 @@ from backend.core.path_conf import (
 )
 from backend.database.db import async_db_session, create_tables, drop_tables
 from backend.database.redis import redis_client
-from backend.plugin.tools import get_plugin_sql, get_plugins
+from backend.plugin.core import get_plugin_sql
+from backend.plugin.installer import install_git_plugin, install_zip_plugin
+from backend.plugin.requirements import get_plugins
 from backend.utils.console import console
-from backend.utils.file_ops import install_git_plugin, install_zip_plugin, parse_sql_script
+from backend.utils.sql_parser import parse_sql_script
 
 output_help = '\n更多信息，尝试 "[cyan]--help[/]"'
 
