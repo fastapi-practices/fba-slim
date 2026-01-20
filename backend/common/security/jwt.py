@@ -205,6 +205,39 @@ async def get_current_user(db: AsyncSession, pk: int) -> User:
         raise errors.TokenError(msg='Token 无效')
     if not user.status:
         raise errors.AuthorizationError(msg='用户已被锁定，请联系系统管理员')
+    if user.dept_id:
+        if not user.dept.status:
+            raise errors.AuthorizationError(msg='用户所属部门已被锁定，请联系系统管理员')
+        if user.dept.del_flag:
+            raise errors.AuthorizationError(msg='用户所属部门已被删除，请联系系统管理员')
+    if user.roles:
+        role_status = [role.status for role in user.roles]
+        if all(status == 0 for status in role_status):
+            raise errors.AuthorizationError(msg='用户所属角色已被锁定，请联系系统管理员')
+    return user
+
+
+async def get_jwt_user(user_id: int) -> GetUserInfoWithRelationDetail:
+    """
+    获取 JWT 用户
+
+    :param user_id:
+    :return:
+    """
+    cache_user = await redis_client.get(f'{settings.JWT_USER_REDIS_PREFIX}:{user_id}')
+    if not cache_user:
+        async with async_db_session() as db:
+            current_user = await get_current_user(db, user_id)
+            user = GetUserInfoWithRelationDetail.model_validate(current_user)
+            await redis_client.setex(
+                f'{settings.JWT_USER_REDIS_PREFIX}:{user_id}',
+                settings.TOKEN_EXPIRE_SECONDS,
+                user.model_dump_json(),
+            )
+    else:
+        # TODO: 在恰当的时机，应替换为使用 model_validate_json
+        # https://docs.pydantic.dev/latest/concepts/json/#partial-json-parsing
+        user = GetUserInfoWithRelationDetail.model_validate(from_json(cache_user, allow_partial=True))
     return user
 
 
@@ -238,21 +271,7 @@ async def jwt_authentication(token: str) -> GetUserInfoWithRelationDetail:
     if token != redis_token:
         raise errors.TokenError(msg='Token 已失效')
 
-    cache_user = await redis_client.get(f'{settings.JWT_USER_REDIS_PREFIX}:{user_id}')
-    if not cache_user:
-        async with async_db_session() as db:
-            current_user = await get_current_user(db, user_id)
-            user = GetUserInfoWithRelationDetail.model_validate(current_user)
-            await redis_client.setex(
-                f'{settings.JWT_USER_REDIS_PREFIX}:{user_id}',
-                settings.TOKEN_EXPIRE_SECONDS,
-                user.model_dump_json(),
-            )
-    else:
-        # TODO: 在恰当的时机，应替换为使用 model_validate_json
-        # https://docs.pydantic.dev/latest/concepts/json/#partial-json-parsing
-        user = GetUserInfoWithRelationDetail.model_validate(from_json(cache_user, allow_partial=True))
-    return user
+    return await get_jwt_user(user_id)
 
 
 # 超级管理员鉴权依赖注入
