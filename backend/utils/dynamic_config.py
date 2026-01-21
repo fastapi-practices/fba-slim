@@ -57,26 +57,6 @@ async def _load_config(
             setattr(settings, config_key, converter(configs[config_key]))
 
 
-async def load_user_security_config(db: AsyncSession) -> None:
-    """
-    获取用户安全配置
-
-    :param db: 数据库会话
-    :return:
-    """
-    mapping = {
-        'USER_LOCK_THRESHOLD': int,
-        'USER_LOCK_SECONDS': int,
-        'USER_PASSWORD_EXPIRY_DAYS': int,
-        'USER_PASSWORD_REMINDER_DAYS': int,
-        'USER_PASSWORD_HISTORY_CHECK_COUNT': int,
-        'USER_PASSWORD_MIN_LENGTH': int,
-        'USER_PASSWORD_MAX_LENGTH': int,
-        'USER_PASSWORD_REQUIRE_SPECIAL_CHAR': _to_bool,
-    }
-    await _load_config(db, ConfigType.user_security, mapping, 'USER_SECURITY_CONFIG_STATUS')
-
-
 async def load_login_config(db: AsyncSession) -> None:
     """
     获取登录配置
@@ -88,20 +68,3 @@ async def load_login_config(db: AsyncSession) -> None:
         'LOGIN_CAPTCHA_ENABLED': _to_bool,
     }
     await _load_config(db, ConfigType.login, mapping, 'LOGIN_CONFIG_STATUS')
-
-
-async def load_email_config(db: AsyncSession) -> None:
-    """
-    获取邮箱配置
-
-    :param db: 数据库会话
-    :return:
-    """
-    mapping = {
-        'EMAIL_HOST': str,
-        'EMAIL_PORT': int,
-        'EMAIL_SSL': _to_bool,
-        'EMAIL_USERNAME': str,
-        'EMAIL_PASSWORD': str,
-    }
-    await _load_config(db, ConfigType.email, mapping, 'EMAIL_CONFIG_STATUS')

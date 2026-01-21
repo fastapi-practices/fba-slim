@@ -57,34 +57,5 @@ EXPOSE 8001
 
 CMD ["supervisord", "-c", "/etc/supervisor/supervisord.conf"]
 
-# === Celery Worker image ===
-FROM base_server AS fba_celery_worker
-
-COPY deploy/backend/supervisor/fba_celery_worker.conf /etc/supervisor/conf.d/
-
-RUN mkdir -p /var/log/fba
-
-CMD ["supervisord", "-c", "/etc/supervisor/supervisord.conf"]
-
-# === Celery Beat image ===
-FROM base_server AS fba_celery_beat
-
-COPY deploy/backend/supervisor/fba_celery_beat.conf /etc/supervisor/conf.d/
-
-RUN mkdir -p /var/log/fba
-
-CMD ["supervisord", "-c", "/etc/supervisor/supervisord.conf"]
-
-# === Celery Flower image ===
-FROM base_server AS fba_celery_flower
-
-COPY deploy/backend/supervisor/fba_celery_flower.conf /etc/supervisor/conf.d/
-
-RUN mkdir -p /var/log/fba
-
-EXPOSE 8555
-
-CMD ["supervisord", "-c", "/etc/supervisor/supervisord.conf"]
-
 # Build image
 FROM ${SERVER_TYPE}
