@@ -58,7 +58,7 @@ dev = [
     "pytest-sugar>=1.1.1",
 ]
 lint = [
-    "prek>=0.2.25",
+    "prek>=0.3.0",
 ]
 server = [
     "wait-for-it>=2.3.0",

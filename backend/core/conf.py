@@ -91,7 +91,6 @@ class Settings(BaseSettings):
         f'{FASTAPI_API_V1_PATH}/auth/login',
     ]
     TOKEN_REQUEST_PATH_EXCLUDE_PATTERN: list[Pattern[str]] = [  # JWT / RBAC 路由白名单（正则）
-        rf'^{FASTAPI_API_V1_PATH}/monitors/(redis|server)$',
     ]
 
     # 用户安全
