@@ -41,18 +41,17 @@ class UserService:
         return user
 
     @staticmethod
-    async def get_list(*, db: AsyncSession, dept: int, username: str, phone: str, status: int) -> dict[str, Any]:
+    async def get_list(*, db: AsyncSession, username: str, phone: str, status: int) -> dict[str, Any]:
         """
         获取用户列表
 
         :param db: 数据库会话
-        :param dept: 部门 ID
         :param username: 用户名
         :param phone: 手机号
         :param status: 状态
         :return:
         """
-        user_select = await user_dao.get_select(dept=dept, username=username, phone=phone, status=status)
+        user_select = await user_dao.get_select(username=username, phone=phone, status=status)
         data = await paging_data(db, user_select)
         if data['items']:
             serialized_items = select_join_serialize(data['items'])

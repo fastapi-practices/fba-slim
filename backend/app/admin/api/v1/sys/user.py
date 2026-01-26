@@ -44,12 +44,11 @@ async def get_userinfo(
 )
 async def get_users_paginated(
     db: CurrentSession,
-    dept: Annotated[int | None, Query(description='部门 ID')] = None,
     username: Annotated[str | None, Query(description='用户名')] = None,
     phone: Annotated[str | None, Query(description='手机号')] = None,
     status: Annotated[int | None, Query(description='状态')] = None,
 ) -> ResponseSchemaModel[PageData[GetUserInfoWithRelationDetail]]:
-    page_data = await user_service.get_list(db=db, dept=dept, username=username, phone=phone, status=status)
+    page_data = await user_service.get_list(db=db, username=username, phone=phone, status=status)
     return response_base.success(data=page_data)
 
 
