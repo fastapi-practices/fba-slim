@@ -63,11 +63,10 @@ class CRUDUser(CRUDPlus[User]):
         """
         return await self.select_model_by_column(db, email=email)
 
-    async def get_select(self, dept: int | None, username: str | None, phone: str | None, status: int | None) -> Select:
+    async def get_select(self, username: str | None, phone: str | None, status: int | None) -> Select:
         """
         获取用户列表查询表达式
 
-        :param dept: 部门 ID
         :param username: 用户名
         :param phone: 电话号码
         :param status: 用户状态
@@ -75,8 +74,6 @@ class CRUDUser(CRUDPlus[User]):
         """
         filters = {}
 
-        if dept:
-            filters['dept_id'] = dept
         if username:
             filters['username__like'] = f'%{username}%'
         if phone:
