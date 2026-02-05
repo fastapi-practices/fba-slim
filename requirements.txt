@@ -194,7 +194,7 @@ pluggy==1.6.0
 prek==0.3.0
 prometheus-client==0.24.1
     # via fba-slim
-protobuf==6.33.4
+protobuf==6.33.5
     # via
     #   googleapis-common-protos
     #   opentelemetry-proto
