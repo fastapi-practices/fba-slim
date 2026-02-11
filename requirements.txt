@@ -46,7 +46,7 @@ colorama==0.4.6 ; sys_platform == 'win32'
     #   loguru
     #   pytest
     #   uvicorn
-cryptography==46.0.3
+cryptography==46.0.5
     # via fba-slim
 dnspython==2.8.0
     # via email-validator
