@@ -187,7 +187,7 @@ packaging==26.0
     #   opentelemetry-instrumentation
     #   opentelemetry-instrumentation-sqlalchemy
     #   pytest
-pillow==12.1.0
+pillow==12.1.1
     # via fast-captcha
 pluggy==1.6.0
     # via pytest
