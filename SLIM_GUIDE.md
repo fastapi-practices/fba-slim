@@ -1,0 +1,272 @@
+# FBA-Slim 瘦身指南
+
+> 本文档记录了 fba-slim 与 fba 完整版之间的差异，方便日后从完整版合并代码时快速瘦身
+
+## 功能差异概览
+
+| 模块                            | 完整版 | 精简版 | 说明                          |
+|-------------------------------|-----|-----|-----------------------------|
+| 用户认证 (JWT)                    | ✅   | ✅   | 完整保留                        |
+| RBAC (角色/菜单/部门/权限校验)          | ✅   | ❌   | 整体移除，仅保留 `DependsSuperUser` |
+| 用户 CRUD                       | ✅   | ✅   | 保留（移除 dept/role 关联）         |
+| 操作日志/登录日志                     | ✅   | ❌   | 移除 DB 日志，中间件仅控制台输出          |
+| 多级缓存 (Local + Redis + PubSub) | ✅   | ✅   | 完整保留                        |
+| Snowflake 分布式 ID              | ✅   | ✅   | 完整保留                        |
+| 文件上传                          | ✅   | ✅   | 完整保留                        |
+| 密码安全/历史记录                     | ✅   | ✅   | 完整保留                        |
+| config 插件                     | ✅   | ✅   | 保留                          |
+| 插件核心系统                        | ✅   | ✅   | 完整保留                        |
+| Celery 任务系统                   | ✅   | ❌   | 整体移除                        |
+| Socket.IO 实时通信                | ✅   | ❌   | 整体移除                        |
+| Prometheus + OTel 可观测性        | ✅   | ❌   | 整体移除                        |
+| 监控 API (online/redis/server)  | ✅   | ❌   | 整体移除                        |
+| 数据权限 (DataRule/DataScope)     | ✅   | ❌   | 整体移除                        |
+| dict 插件                       | ✅   | ❌   | 整体移除                        |
+| email 插件                      | ✅   | ❌   | 整体移除                        |
+| notice 插件                     | ✅   | ❌   | 整体移除                        |
+| oauth2 插件                     | ✅   | ❌   | 整体移除                        |
+| code_generator 插件             | ✅   | ❌   | 整体移除                        |
+
+---
+
+## 已删除的目录
+
+```
+backend/app/task/                           # Celery 任务系统
+backend/common/socketio/                    # Socket.IO 实时通信
+backend/common/observability/               # Prometheus + OpenTelemetry
+backend/common/prometheus/                  # Prometheus 指标
+backend/app/admin/api/v1/monitor/           # 监控 API (online/redis/server)
+backend/app/admin/tests/                    # 测试文件
+backend/app/admin/api/v1/log/               # 日志 API (login_log/opera_log)
+backend/plugin/dict/                        # 字典插件
+backend/plugin/email/                       # 邮件插件
+backend/plugin/notice/                      # 通知插件
+backend/plugin/oauth2/                      # OAuth2 插件
+backend/plugin/code_generator/              # 代码生成插件
+deploy/backend/grafana/                     # Grafana 部署配置
+```
+
+## 已删除的文件
+
+```
+# RBAC (角色/菜单/部门)
+backend/app/admin/model/role.py
+backend/app/admin/model/menu.py
+backend/app/admin/model/dept.py
+backend/app/admin/model/m2m.py
+backend/app/admin/schema/role.py
+backend/app/admin/schema/menu.py
+backend/app/admin/schema/dept.py
+backend/app/admin/crud/crud_role.py
+backend/app/admin/crud/crud_menu.py
+backend/app/admin/crud/crud_dept.py
+backend/app/admin/service/role_service.py
+backend/app/admin/service/menu_service.py
+backend/app/admin/service/dept_service.py
+backend/app/admin/api/v1/sys/role.py
+backend/app/admin/api/v1/sys/menu.py
+backend/app/admin/api/v1/sys/dept.py
+backend/common/security/rbac.py
+backend/common/security/permission.py
+backend/utils/build_tree.py
+
+# 数据权限
+backend/app/admin/model/data_rule.py
+backend/app/admin/model/data_scope.py
+backend/app/admin/schema/data_rule.py
+backend/app/admin/schema/data_scope.py
+backend/app/admin/schema/monitor.py
+backend/app/admin/crud/crud_data_rule.py
+backend/app/admin/crud/crud_data_scope.py
+backend/app/admin/service/data_rule_service.py
+backend/app/admin/service/data_scope_service.py
+backend/app/admin/api/v1/sys/data_rule.py
+backend/app/admin/api/v1/sys/data_scope.py
+
+# 可观测性
+backend/utils/otel.py
+
+# 日志系统
+backend/app/admin/model/login_log.py
+backend/app/admin/model/opera_log.py
+backend/app/admin/schema/login_log.py
+backend/app/admin/schema/opera_log.py
+backend/app/admin/crud/crud_login_log.py
+backend/app/admin/crud/crud_opera_log.py
+backend/app/admin/service/login_log_service.py
+backend/app/admin/service/opera_log_service.py
+backend/common/queue.py
+
+# 部署
+deploy/backend/supervisor/fba_celery_beat.conf
+deploy/backend/supervisor/fba_celery_flower.conf
+deploy/backend/supervisor/fba_celery_worker.conf
+deploy/backend/grafana/dashboards/fba_celery.json
+```
+
+---
+
+## 已修改的文件
+
+### 模型层
+
+| 文件                                    | 修改内容                                |
+|---------------------------------------|-------------------------------------|
+| `backend/app/admin/model/__init__.py` | 仅保留 `User`、`UserPasswordHistory` 导出 |
+| `backend/app/admin/model/user.py`     | 删除 `dept_id` 字段                     |
+
+### Schema 层
+
+| 文件                                 | 修改内容                                                                                                                                     |
+|------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------|
+| `backend/app/admin/schema/user.py` | 删除 `dept_id`/`roles` 字段、`AddUserRoleParam`/`GetUserInfoWithRelationDetail`/`GetCurrentUserInfoWithRelationDetail`/`AddOAuth2UserParam` 类 |
+
+### CRUD 层
+
+| 文件                                    | 修改内容                                                                                                            |
+|---------------------------------------|-----------------------------------------------------------------------------------------------------------------|
+| `backend/app/admin/crud/crud_user.py` | 删除 Role/Dept/Menu/m2m 全部引用，移除 `get_join()` 方法、JoinConfig、m2m 操作；`add()`/`update()`/`delete()`/`get_select()` 简化 |
+
+### Service 层
+
+| 文件                                          | 修改内容                                                                              |
+|---------------------------------------------|-----------------------------------------------------------------------------------|
+| `backend/app/admin/service/user_service.py` | 删除 `get_roles()` 方法、dept/role 验证逻辑、`dept` 参数；`get_userinfo()` 改用 `user_dao.get()` |
+| `backend/app/admin/service/auth_service.py` | 删除 `login_log_service`/`menu_dao` 引用、`get_codes()` 方法、`background_tasks` 参数       |
+
+### Utils/安全层
+
+| 文件                                 | 修改内容                                                                                                 |
+|------------------------------------|------------------------------------------------------------------------------------------------------|
+| `backend/app/admin/utils/cache.py` | 删除 `clear_by_role_id()`/`clear_by_menu_id()`/`clear_by_data_scope_id()`/`clear_by_data_rule_id()` 方法 |
+| `backend/utils/trace_id.py`        | 删除 `OtelTraceIdPlugin` 类                                                                             |
+
+### API 层
+
+| 文件                                           | 修改内容                                                                                            |
+|----------------------------------------------|-------------------------------------------------------------------------------------------------|
+| `backend/app/admin/api/v1/sys/user.py`       | 删除 `get_user_roles` 路由、`dept` 参数；`delete_user` 改用 `DependsSuperUser`；响应类型改为 `GetUserInfoDetail` |
+| `backend/app/admin/api/v1/sys/file.py`       | `RequestPermission + DependsRBAC` 改为 `DependsJwtAuth`                                           |
+| `backend/app/admin/api/v1/sys/__init__.py`   | 仅保留 `user_router`、`file_router`、`plugin_router`                                                 |
+| `backend/app/admin/api/v1/auth/auth.py`      | 删除 `get_codes` 路由、`background_tasks` 参数                                                         |
+| `backend/app/admin/api/router.py`            | 删除 `monitor_router`、`log_router`                                                                |
+| `backend/app/router.py`                      | 删除 `task_v1`                                                                                    |
+| `backend/app/admin/api/v1/sys/plugin.py`     | `RequestPermission + DependsRBAC` 改为 `DependsSuperUser`                                         |
+| `backend/plugin/config/api/v1/sys/config.py` | `RequestPermission + DependsRBAC` 改为 `DependsSuperUser`                                         |
+
+### JWT/中间件层
+
+| 文件                                           | 修改内容                                                                                                             |
+|----------------------------------------------|------------------------------------------------------------------------------------------------------------------|
+| `backend/common/security/jwt.py`             | `GetUserInfoWithRelationDetail` → `GetUserInfoDetail`；`get_current_user()` 改用 `user_dao.get()`，删除 dept/role 状态检查 |
+| `backend/middleware/jwt_auth_middleware.py`  | `GetUserInfoWithRelationDetail` → `GetUserInfoDetail`                                                            |
+| `backend/middleware/opera_log_middleware.py` | 移除 DB 队列/消费者/入库，改为纯控制台日志输出                                                                                       |
+| `backend/middleware/access_middleware.py`    | 删除 Prometheus 导入和 2 处计数器调用                                                                                       |
+
+### 核心层
+
+| 文件                          | 修改内容                                                                                                                                       |
+|-----------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|
+| `backend/core/registrar.py` | 删除 socketio/prometheus/otel 导入、`register_socket_app()`、`register_metrics()`、OtelTraceIdPlugin、`create_task(OperaLogMiddleware.consumer())` |
+| `backend/core/conf.py`      | 删除 CELERY/GRAFANA/DATA_PERMISSION/OAUTH2/EMAIL/WS/CODE_GENERATOR/OPERA_LOG_*/RBAC_ROLE_MENU_* 配置段                                          |
+| `backend/main.py`           | 删除插件依赖安装逻辑                                                                                                                                 |
+
+### CLI
+
+| 文件               | 修改内容                                                                             |
+|------------------|----------------------------------------------------------------------------------|
+| `backend/cli.py` | 删除 Celery/插件安装卸载/代码生成相关命令，`FbaCli.subcmd` 简化为 `Init \| Run \| Format \| Alembic` |
+
+### Enum
+
+| 文件                        | 修改内容                                                                                                                                            |
+|---------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
+| `backend/common/enums.py` | 删除 `MenuType`、`MethodType`、`BuildTreeType`、`RoleDataRuleOperatorType`、`RoleDataRuleExpressionType`、`LoginLogStatusType`、`OperaLogCipherType` 枚举 |
+
+### SQL 初始化数据
+
+| 文件                                                    | 修改内容                                                                              |
+|-------------------------------------------------------|-----------------------------------------------------------------------------------|
+| `backend/sql/mysql/init_test_data.sql`                | 仅保留 sys_user INSERT（删除 dept/menu/role/role_menu/user_role/data_scope/data_rule 等） |
+| `backend/sql/mysql/init_snowflake_test_data.sql`      | 同上                                                                                |
+| `backend/sql/postgresql/init_test_data.sql`           | 同上                                                                                |
+| `backend/sql/postgresql/init_snowflake_test_data.sql` | 同上                                                                                |
+
+### 配置/部署
+
+| 文件                                          | 修改内容                                                                                 |
+|---------------------------------------------|--------------------------------------------------------------------------------------|
+| `backend/.env.example`                      | 删除 Celery/RabbitMQ/OAuth2/Email 环境变量                                                 |
+| `pyproject.toml`                            | 删除 celery/socketio/opentelemetry/prometheus/psutil/dulwich/flower/gevent/aio-pika 依赖 |
+| `docker-compose.yml`                        | 删除 rabbitmq/celery/grafana 全套容器                                                      |
+| `Dockerfile`                                | 简化为单一 server 镜像，删除 celery worker/beat/flower 阶段                                      |
+| `deploy/backend/docker-compose/.env.docker` | 删除 RabbitMQ/Celery/Grafana 端口映射                                                      |
+| `deploy/backend/docker-compose/.env.server` | 删除 Celery/OAuth2/Email 环境变量                                                          |
+
+---
+
+## 合并指南
+
+从 fba 完整版同步代码到 fba-slim 后，需要关注以下冲突区域：
+
+### 快速检测 grep 模式
+
+合并后运行以下命令，快速找出需要处理的非 slim 引用：
+
+```bash
+# Celery / 任务系统
+grep -rn "celery\|app\.task\|CELERY_" backend/ --include="*.py" | grep -v "__pycache__"
+
+# Socket.IO
+grep -rn "socketio\|common\.socketio\|WS_NO_AUTH" backend/ --include="*.py" | grep -v "__pycache__"
+
+# 可观测性
+grep -rn "prometheus\|opentelemetry\|otel\|GRAFANA_" backend/ --include="*.py" | grep -v "__pycache__"
+
+# RBAC (角色/菜单/部门/权限)
+grep -rn "DependsRBAC\|RequestPermission\|rbac_verify\|role_menu\|user_role\|dept_dao\|role_dao\|menu_dao\|crud_role\|crud_menu\|crud_dept\|dept_service\|role_service\|menu_service\|GetRoleDetail\|GetDeptDetail\|GetMenuDetail\|build_tree\|GetUserInfoWithRelationDetail\|GetCurrentUserInfoWithRelationDetail\|RBAC_ROLE_MENU" backend/ --include="*.py" | grep -v "__pycache__"
+
+# 数据权限
+grep -rn "DataRule\|DataScope\|data_rule\|data_scope\|role_data_scope\|data_scope_rule\|DataPermissionFilter\|filter_data_permission\|is_filter_scopes" backend/ --include="*.py" | grep -v "__pycache__"
+
+# 已移除的插件
+grep -rn "plugin\.dict\|plugin\.email\|plugin\.notice\|plugin\.oauth2\|plugin\.code_generator" backend/ --include="*.py" | grep -v "__pycache__"
+
+# 监控 API
+grep -rn "monitor_router\|api/v1/monitor\|sys:monitor" backend/ --include="*.py" | grep -v "__pycache__"
+
+# 邮箱验证码
+grep -rn "EMAIL_CAPTCHA_REDIS_PREFIX\|CACHE_DICT_REDIS_PREFIX" backend/ --include="*.py" | grep -v "__pycache__"
+
+# psutil (服务器监控)
+grep -rn "import psutil" backend/ --include="*.py" | grep -v "__pycache__"
+
+# 日志系统 (DB 日志)
+grep -rn "LoginLog\|OperaLog\|login_log\|opera_log\|opera_log_service\|login_log_service\|OPERA_LOG_\|batch_dequeue\|opera_log_queue" backend/ --include="*.py" | grep -v "__pycache__"
+```
+
+### 高冲突文件
+
+以下文件在完整版更新时最容易产生冲突：
+
+1. **`backend/core/conf.py`** — 配置字段差异最大
+2. **`backend/core/registrar.py`** — 中间件和组件注册差异
+3. **`backend/cli.py`** — CLI 命令结构差异大
+4. **`backend/main.py`** — 插件检测逻辑已保留
+5. **`backend/common/security/jwt.py`** — `GetUserInfoDetail` vs `GetUserInfoWithRelationDetail`，`get_current_user()` 差异
+6. **`backend/app/admin/crud/crud_user.py`** — 无 get_join/JoinConfig/m2m 操作
+7. **`backend/app/admin/service/auth_service.py`** — 登录日志、menu_dao、background_tasks 差异
+8. **`backend/middleware/opera_log_middleware.py`** — 完整版有 DB 队列，slim 版仅控制台
+9. **`backend/middleware/jwt_auth_middleware.py`** — schema 类型差异
+10. **`pyproject.toml`** — 依赖列表差异
+11. **`docker-compose.yml`** — 容器编排差异
+12. **`Dockerfile`** — 构建阶段差异
+
+### 合并策略
+
+1. **优先接受 slim 版本**的文件：`conf.py`、`registrar.py`、`cli.py`、`main.py`、`Dockerfile`、`docker-compose.yml`
+2. **需要手动合并**的文件：CRUD/Service/API 层（可能有新增功能需要保留，但需移除 RBAC/数据权限/可观测性引用）
+3. **直接接受完整版**的文件：不涉及上述移除功能的纯业务逻辑改动
+4. **合并后运行上述 grep 命令**清理残留引用
+5. **运行 `uv lock` 和导入检查**确认无依赖/导入错误

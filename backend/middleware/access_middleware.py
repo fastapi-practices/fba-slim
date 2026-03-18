@@ -19,10 +19,11 @@ class AccessMiddleware(BaseHTTPMiddleware):
         :param call_next: 下一个中间件或路由处理函数
         :return:
         """
-        path = request.url.path if not request.url.query else request.url.path + '/' + request.url.query
+        path = request.url.path
+        method = request.method
 
-        if request.method != 'OPTIONS':
-            log.debug(f'--> 请求开始[{path}]')
+        if method != 'OPTIONS':
+            log.debug(f'--> 请求开始[{path if not request.url.query else request.url.path + "/" + request.url.query}]')
 
         perf_time = time.perf_counter()
         ctx.perf_time = perf_time

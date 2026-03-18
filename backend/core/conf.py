@@ -68,6 +68,16 @@ class Settings(BaseSettings):
     # Redis
     REDIS_TIMEOUT: int = 5
 
+    # 缓存
+    CACHE_LOCAL_ENABLED: bool = True
+    CACHE_LOCAL_MAXSIZE: int = 100000
+    CACHE_LOCAL_TTL: int = 60 * 60 * 2  # 2 小时
+    CACHE_REDIS_TTL: int = 60 * 60 * 2  # 2 小时
+    CACHE_CONFIG_REDIS_PREFIX: str = 'fba:cache:config'
+    CACHE_PUBSUB_CHANNEL: str = 'fba:cache:invalidate'
+    CACHE_PUBSUB_RECONNECT_DELAY: int = 5  # 重连延迟（秒）
+    CACHE_PUBSUB_MAX_RECONNECT_ATTEMPTS: int = 10  # 最大重连次数
+
     # .env Snowflake
     SNOWFLAKE_DATACENTER_ID: int | None = None
     SNOWFLAKE_WORKER_ID: int | None = None
@@ -86,14 +96,20 @@ class Settings(BaseSettings):
     TOKEN_REFRESH_EXPIRE_SECONDS: int = 60 * 60 * 24 * 7  # 7 天
     TOKEN_REDIS_PREFIX: str = 'fba:token'
     TOKEN_EXTRA_INFO_REDIS_PREFIX: str = 'fba:token_extra_info'
+    TOKEN_ONLINE_REDIS_PREFIX: str = 'fba:token_online'
     TOKEN_REFRESH_REDIS_PREFIX: str = 'fba:refresh_token'
     TOKEN_REQUEST_PATH_EXCLUDE: list[str] = [  # JWT / RBAC 路由白名单
         f'{FASTAPI_API_V1_PATH}/auth/login',
     ]
-    TOKEN_REQUEST_PATH_EXCLUDE_PATTERN: list[Pattern[str]] = [  # JWT / RBAC 路由白名单（正则）
-    ]
+    TOKEN_REQUEST_PATH_EXCLUDE_PATTERN: list[Pattern[str]] = []  # JWT / RBAC 路由白名单（正则）
 
     # 用户安全
+    USER_LOCK_REDIS_PREFIX: str = 'fba:user:lock'
+    USER_LOCK_THRESHOLD: int = 5  # 用户密码错误锁定阈值，0 表示禁用锁定
+    USER_LOCK_SECONDS: int = 60 * 5  # 5 分钟
+    USER_PASSWORD_EXPIRY_DAYS: int = 365  # 用户密码有效期，0 表示永不过期
+    USER_PASSWORD_REMINDER_DAYS: int = 7  # 用户密码到期提醒，0 表示不提醒
+    USER_PASSWORD_HISTORY_CHECK_COUNT: int = 3
     USER_PASSWORD_MIN_LENGTH: int = 6
     USER_PASSWORD_MAX_LENGTH: int = 32
     USER_PASSWORD_REQUIRE_SPECIAL_CHAR: bool = False
@@ -102,6 +118,7 @@ class Settings(BaseSettings):
     LOGIN_CAPTCHA_ENABLED: bool = True
     LOGIN_CAPTCHA_REDIS_PREFIX: str = 'fba:login:captcha'
     LOGIN_CAPTCHA_EXPIRE_SECONDS: int = 60 * 5  # 5 分钟
+    LOGIN_FAILURE_PREFIX: str = 'fba:login:failure'
 
     # JWT
     JWT_USER_REDIS_PREFIX: str = 'fba:user'
@@ -110,9 +127,15 @@ class Settings(BaseSettings):
     COOKIE_REFRESH_TOKEN_KEY: str = 'fba_refresh_token'
     COOKIE_REFRESH_TOKEN_EXPIRE_SECONDS: int = 60 * 60 * 24 * 7  # 7 天
 
+    # 插件
+    PLUGIN_PIP_CHINA: bool = True
+    PLUGIN_PIP_INDEX_URL: str = 'https://mirrors.aliyun.com/pypi/simple/'
+    PLUGIN_PIP_MAX_RETRY: int = 3
+    PLUGIN_REDIS_PREFIX: str = 'fba:plugin'
+
     # CORS
     CORS_ALLOWED_ORIGINS: list[str] = [  # 末尾不带斜杠
-        'http://127.0.0.1:8000',
+        'http://127.0.0.1',
         'http://localhost:5173',
     ]
     CORS_EXPOSE_HEADERS: list[str] = [
@@ -169,36 +192,8 @@ class Settings(BaseSettings):
     LOG_ACCESS_FILENAME: str = 'fba_access.log'
     LOG_ERROR_FILENAME: str = 'fba_error.log'
 
-    # 操作日志
-    OPERA_LOG_PATH_EXCLUDE: list[str] = [
-        '/favicon.ico',
-        '/docs',
-        '/redoc',
-        '/openapi',
-        f'{FASTAPI_API_V1_PATH}/auth/login/swagger',
-    ]
-    OPERA_LOG_REDACT_KEYS: list[str] = [
-        'password',
-        'old_password',
-        'new_password',
-        'confirm_password',
-    ]
-    OPERA_LOG_QUEUE_BATCH_CONSUME_SIZE: int = 100
-    OPERA_LOG_QUEUE_TIMEOUT: int = 60  # 1 分钟
-
-    # Plugin 配置
-    PLUGIN_PIP_CHINA: bool = True
-    PLUGIN_PIP_INDEX_URL: str = 'https://mirrors.aliyun.com/pypi/simple/'
-    PLUGIN_PIP_MAX_RETRY: int = 3
-    PLUGIN_REDIS_PREFIX: str = 'fba:plugin'
-
     # I18n 配置
     I18N_DEFAULT_LANGUAGE: str = 'zh-CN'
-
-    # Grafana
-    GRAFANA_METRICS: bool = False
-    GRAFANA_APP_NAME: str = 'fba_server'
-    GRAFANA_OTLP_GRPC_ENDPOINT: str = 'fba_alloy:4317'
 
     @model_validator(mode='before')
     @classmethod

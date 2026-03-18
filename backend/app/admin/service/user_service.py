@@ -10,16 +10,15 @@ from backend.app.admin.schema.user import (
     ResetPasswordParam,
     UpdateUserParam,
 )
+from backend.app.admin.schema.user_password_history import CreateUserPasswordHistoryParam
+from backend.app.admin.service.user_password_history_service import password_security_service
 from backend.app.admin.utils.password_security import password_verify, validate_new_password
-from backend.common.context import ctx
 from backend.common.enums import UserPermissionType
 from backend.common.exception import errors
 from backend.common.pagination import paging_data
-from backend.common.response.response_code import CustomErrorCode
 from backend.common.security.jwt import get_token, jwt_decode
 from backend.core.conf import settings
 from backend.database.redis import redis_client
-from backend.utils.serializers import select_join_serialize
 
 
 class UserService:
@@ -35,7 +34,12 @@ class UserService:
         :param username: 用户名
         :return:
         """
-        user = await user_dao.get_join(db, user_id=pk, username=username)
+        if pk:
+            user = await user_dao.get(db, pk)
+        elif username:
+            user = await user_dao.get_by_username(db, username)
+        else:
+            user = None
         if not user:
             raise errors.NotFoundError(msg='用户不存在')
         return user
@@ -53,10 +57,6 @@ class UserService:
         """
         user_select = await user_dao.get_select(username=username, phone=phone, status=status)
         data = await paging_data(db, user_select)
-        if data['items']:
-            serialized_items = select_join_serialize(data['items'])
-            # 确保返回的是列表，即使只有一个元素
-            data['items'] = [serialized_items] if not isinstance(serialized_items, list) else serialized_items
         return data
 
     @staticmethod
@@ -85,7 +85,7 @@ class UserService:
         :param obj: 用户更新参数
         :return:
         """
-        user = await user_dao.get_join(db, user_id=pk)
+        user = await user_dao.get(db, pk)
         if not user:
             raise errors.NotFoundError(msg='用户不存在')
         if obj.username != user.username and await user_dao.get_by_username(db, obj.username):
@@ -137,7 +137,6 @@ class UserService:
                 token = get_token(request)
                 token_payload = jwt_decode(token)
                 if pk == user.id:
-                    # 系统管理员修改自身时，除当前 token 外，其他 token 失效
                     if not new_multi_login:
                         key_prefix = f'{settings.TOKEN_REDIS_PREFIX}:{user.id}'
                         await redis_client.delete_prefix(
@@ -145,7 +144,6 @@ class UserService:
                             exclude=f'{key_prefix}:{token_payload.session_uuid}',
                         )
                 else:
-                    # 系统管理员修改他人时，他人 token 全部失效
                     if not new_multi_login:
                         key_prefix = f'{settings.TOKEN_REDIS_PREFIX}:{user.id}'
                         await redis_client.delete_prefix(key_prefix)
@@ -169,9 +167,11 @@ class UserService:
         if not user:
             raise errors.NotFoundError(msg='用户不存在')
 
-        validate_new_password(password)
+        await validate_new_password(db, user.id, password)
         count = await user_dao.reset_password(db, user.id, password)
 
+        history_obj = CreateUserPasswordHistoryParam(user_id=user.id, password=user.password)
+        await password_security_service.save_password_history(db, history_obj)
         await user_dao.update_password_changed_time(db, user.id)
 
         key_prefix = [
@@ -180,7 +180,7 @@ class UserService:
             f'{settings.JWT_USER_REDIS_PREFIX}:{user.id}',
         ]
         for prefix in key_prefix:
-            await redis_client.delete(prefix)
+            await redis_client.delete_prefix(prefix)
         return count
 
     @staticmethod
@@ -212,22 +212,15 @@ class UserService:
         return count
 
     @staticmethod
-    async def update_email(*, db: AsyncSession, user_id: int, captcha: str, email: str) -> int:
+    async def update_email(*, db: AsyncSession, user_id: int, email: str) -> int:
         """
         更新当前用户邮箱
 
         :param db: 数据库会话
         :param user_id: 用户 ID
-        :param captcha: 邮箱验证码
         :param email: 邮箱
         :return:
         """
-        captcha_code = await redis_client.get(f'{settings.EMAIL_CAPTCHA_REDIS_PREFIX}:{ctx.ip}')
-        if not captcha_code:
-            raise errors.RequestError(msg='验证码已失效，请重新获取')
-        if captcha != captcha_code:
-            raise errors.CustomError(error=CustomErrorCode.CAPTCHA_ERROR)
-        await redis_client.delete(f'{settings.EMAIL_CAPTCHA_REDIS_PREFIX}:{ctx.ip}')
         count = await user_dao.update_email(db, user_id, email)
         await redis_client.delete(f'{settings.JWT_USER_REDIS_PREFIX}:{user_id}')
         return count
@@ -250,9 +243,11 @@ class UserService:
         if obj.new_password != obj.confirm_password:
             raise errors.RequestError(msg='两次密码输入不一致')
 
-        validate_new_password(obj.new_password)
+        await validate_new_password(db, user_id, obj.new_password)
         count = await user_dao.reset_password(db, user_id, obj.new_password)
 
+        history_obj = CreateUserPasswordHistoryParam(user_id=user.id, password=user.password)
+        await password_security_service.save_password_history(db, history_obj)
         await user_dao.update_password_changed_time(db, user.id)
 
         key_prefix = [
@@ -280,6 +275,7 @@ class UserService:
         key_prefix = [
             f'{settings.TOKEN_REDIS_PREFIX}:{user.id}',
             f'{settings.TOKEN_REFRESH_REDIS_PREFIX}:{user.id}',
+            f'{settings.JWT_USER_REDIS_PREFIX}:{user.id}',
         ]
         for key in key_prefix:
             await redis_client.delete_prefix(key)
