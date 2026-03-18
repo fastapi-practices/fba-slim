@@ -12,7 +12,7 @@ from pydantic_core import from_json
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.admin.model import User
-from backend.app.admin.schema.user import GetUserInfoWithRelationDetail
+from backend.app.admin.schema.user import GetUserInfoDetail
 from backend.common.dataclasses import AccessToken, NewToken, RefreshToken, TokenPayload
 from backend.common.exception import errors
 from backend.core.conf import settings
@@ -200,7 +200,7 @@ async def get_current_user(db: AsyncSession, pk: int) -> User:
     """
     from backend.app.admin.crud.crud_user import user_dao
 
-    user = await user_dao.get_join(db, user_id=pk)
+    user = await user_dao.get(db, pk)
     if not user:
         raise errors.TokenError(msg='Token 无效')
     if not user.status:
@@ -208,7 +208,7 @@ async def get_current_user(db: AsyncSession, pk: int) -> User:
     return user
 
 
-async def get_jwt_user(user_id: int) -> GetUserInfoWithRelationDetail:
+async def get_jwt_user(user_id: int) -> GetUserInfoDetail:
     """
     获取 JWT 用户
 
@@ -219,7 +219,7 @@ async def get_jwt_user(user_id: int) -> GetUserInfoWithRelationDetail:
     if not cache_user:
         async with async_db_session() as db:
             current_user = await get_current_user(db, user_id)
-            user = GetUserInfoWithRelationDetail.model_validate(current_user)
+            user = GetUserInfoDetail.model_validate(current_user)
             await redis_client.setex(
                 f'{settings.JWT_USER_REDIS_PREFIX}:{user_id}',
                 settings.TOKEN_EXPIRE_SECONDS,
@@ -228,7 +228,7 @@ async def get_jwt_user(user_id: int) -> GetUserInfoWithRelationDetail:
     else:
         # TODO: 在恰当的时机，应替换为使用 model_validate_json
         # https://docs.pydantic.dev/latest/concepts/json/#partial-json-parsing
-        user = GetUserInfoWithRelationDetail.model_validate(from_json(cache_user, allow_partial=True))
+        user = GetUserInfoDetail.model_validate(from_json(cache_user, allow_partial=True))
     return user
 
 
@@ -246,7 +246,7 @@ def superuser_verify(request: Request, _token: str = DependsJwtAuth) -> bool:
     return superuser
 
 
-async def jwt_authentication(token: str) -> GetUserInfoWithRelationDetail:
+async def jwt_authentication(token: str) -> GetUserInfoDetail:
     """
     JWT 认证
 

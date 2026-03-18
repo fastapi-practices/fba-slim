@@ -29,15 +29,6 @@ class AddUserParam(AuthSchemaBase):
     phone: CustomPhoneNumber | None = Field(None, description='手机号码')
 
 
-class AddOAuth2UserParam(AuthSchemaBase):
-    """添加 OAuth2 用户参数"""
-
-    password: str | None = Field(None, description='密码')
-    nickname: str | None = Field(None, description='昵称')
-    email: CustomEmailStr | None = Field(None, description='邮箱')
-    avatar: Annotated[HttpUrl, PlainSerializer(ser_string)] | None = Field(None, description='头像地址')
-
-
 class ResetPasswordParam(SchemaBase):
     """重置密码参数"""
 
@@ -49,7 +40,6 @@ class ResetPasswordParam(SchemaBase):
 class UserInfoSchemaBase(SchemaBase):
     """用户信息基础模型"""
 
-    dept_id: int | None = Field(None, description='部门 ID')
     username: str = Field(description='用户名')
     nickname: str = Field(description='昵称')
     avatar: Annotated[HttpUrl, PlainSerializer(ser_string)] | None = Field(None, description='头像地址')
@@ -66,7 +56,6 @@ class GetUserInfoDetail(UserInfoSchemaBase):
 
     model_config = ConfigDict(from_attributes=True)
 
-    dept_id: int | None = Field(None, description='部门 ID')
     id: int = Field(description='用户 ID')
     uuid: str = Field(description='用户 UUID')
     status: StatusType = Field(description='状态')
@@ -75,15 +64,3 @@ class GetUserInfoDetail(UserInfoSchemaBase):
     is_multi_login: bool = Field(description='是否允许多端登录')
     join_time: datetime = Field(description='加入时间')
     last_login_time: datetime | None = Field(None, description='最后登录时间')
-
-
-class GetUserInfoWithRelationDetail(GetUserInfoDetail):
-    """用户信息关联详情"""
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class GetCurrentUserInfoWithRelationDetail(GetUserInfoWithRelationDetail):
-    """当前用户信息关联详情"""
-
-    model_config = ConfigDict(from_attributes=True)

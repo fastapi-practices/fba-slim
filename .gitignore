@@ -9,3 +9,5 @@ venv/
 .pytest_cache/
 .claude/
 .serena/
+.agents/
+.logs/

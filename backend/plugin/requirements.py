@@ -9,18 +9,8 @@ from starlette.concurrency import run_in_threadpool
 
 from backend.core.conf import settings
 from backend.core.path_conf import PLUGIN_DIR
+from backend.plugin.core import get_plugins
 from backend.plugin.errors import PluginInstallError
-
-
-def get_plugins() -> list[str]:
-    """
-    获取插件列表
-
-    注意：此函数从 backend.plugin.core 导入以避免循环依赖
-    """
-    from backend.plugin.core import get_plugins as _get_plugins
-
-    return _get_plugins()
 
 
 def _is_in_virtualenv() -> bool:
@@ -57,32 +47,25 @@ def install_requirements(plugin: str | None) -> None:  # noqa: C901
                         missing_dependencies = True
 
         if missing_dependencies:
-            try:
-                pip_install = ['uv', 'pip', 'install', '-r', requirements_file]
-                if not _is_in_virtualenv():
-                    pip_install.append('--system')
-                if settings.PLUGIN_PIP_CHINA:
-                    pip_install.extend(['-i', settings.PLUGIN_PIP_INDEX_URL])
+            pip_install = ['uv', 'pip', 'install', '-r', requirements_file]
+            if not _is_in_virtualenv():
+                pip_install.append('--system')
+            if settings.PLUGIN_PIP_CHINA:
+                pip_install.extend(['-i', settings.PLUGIN_PIP_INDEX_URL])
 
-                max_retries = settings.PLUGIN_PIP_MAX_RETRY
-                for attempt in range(max_retries):
-                    try:
-                        subprocess.check_call(
-                            pip_install,
-                            stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL,
-                        )
-                        break
-                    except subprocess.TimeoutExpired:
-                        if attempt == max_retries - 1:
-                            raise PluginInstallError(f'插件 {plugin} 依赖安装超时')
-                        continue
-                    except subprocess.CalledProcessError as e:
-                        if attempt == max_retries - 1:
-                            raise PluginInstallError(f'插件 {plugin} 依赖安装失败：{e}') from e
-                        continue
-            except subprocess.CalledProcessError as e:
-                raise PluginInstallError(f'插件 {plugin} 依赖安装失败：{e}') from e
+            max_retries = settings.PLUGIN_PIP_MAX_RETRY
+            for attempt in range(max_retries):
+                try:
+                    subprocess.check_call(pip_install)
+                    break
+                except subprocess.TimeoutExpired:
+                    if attempt == max_retries - 1:
+                        raise PluginInstallError(f'插件 {plugin} 依赖安装超时')
+                    continue
+                except subprocess.CalledProcessError as e:
+                    if attempt == max_retries - 1:
+                        raise PluginInstallError(f'插件 {plugin} 依赖安装失败：{e}') from e
+                    continue
 
 
 def uninstall_requirements(plugin: str) -> None:
@@ -95,7 +78,7 @@ def uninstall_requirements(plugin: str) -> None:
     requirements_file = PLUGIN_DIR / plugin / 'requirements.txt'
     if os.path.exists(requirements_file):
         try:
-            pip_uninstall = ['uv', 'pip', 'uninstall', '-r', str(requirements_file), '-y']
+            pip_uninstall = ['uv', 'pip', 'uninstall', '-r', str(requirements_file)]
             if not _is_in_virtualenv():
                 pip_uninstall.append('--system')
             subprocess.check_call(pip_uninstall, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

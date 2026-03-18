@@ -1,15 +1,14 @@
 from fastapi import Request, Response
 from fastapi.security import HTTPBasicCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
-from starlette.background import BackgroundTask, BackgroundTasks
 
 from backend.app.admin.crud.crud_user import user_dao
 from backend.app.admin.model import User
 from backend.app.admin.schema.token import GetLoginToken, GetNewToken
 from backend.app.admin.schema.user import AuthLoginParam
-from backend.app.admin.service.login_log_service import login_log_service
+from backend.app.admin.service.user_password_history_service import password_security_service
+from backend.app.admin.utils.password_security import password_verify
 from backend.common.context import ctx
-from backend.common.enums import LoginLogStatusType
 from backend.common.exception import errors
 from backend.common.i18n import t
 from backend.common.log import log
@@ -22,7 +21,6 @@ from backend.common.security.jwt import (
     jwt_decode,
 )
 from backend.core.conf import settings
-from backend.database.db import uuid4_str
 from backend.database.redis import redis_client
 from backend.utils.dynamic_config import load_login_config
 from backend.utils.timezone import timezone
@@ -45,7 +43,19 @@ class AuthService:
         if not user:
             raise errors.NotFoundError(msg='用户名或密码有误')
 
-        return user, -1
+        await password_security_service.check_status(user.id, user.status)
+
+        if user.password is None or not password_verify(password, user.password):
+            await password_security_service.handle_login_failure(db, user.id)
+            raise errors.AuthorizationError(msg='用户名或密码有误')
+
+        days_remaining = await password_security_service.check_password_expiry_status(
+            db, user.last_password_changed_time
+        )
+
+        await password_security_service.handle_login_success(user.id)
+
+        return user, days_remaining
 
     async def swagger_login(self, *, db: AsyncSession, obj: HTTPBasicCredentials) -> tuple[str, User]:
         """
@@ -71,7 +81,6 @@ class AuthService:
         db: AsyncSession,
         response: Response,
         obj: AuthLoginParam,
-        background_tasks: BackgroundTasks,
     ) -> GetLoginToken:
         """
         用户登录
@@ -79,13 +88,9 @@ class AuthService:
         :param db: 数据库会话
         :param response: 响应对象
         :param obj: 登录参数
-        :param background_tasks: 后台任务
         :return:
         """
-        user = None
         try:
-            user, days_remaining = await self.user_verify(db, obj.username, obj.password)
-
             await load_login_config(db)
             if settings.LOGIN_CAPTCHA_ENABLED:
                 if not obj.uuid or not obj.captcha:
@@ -97,6 +102,7 @@ class AuthService:
                     raise errors.CustomError(error=CustomErrorCode.CAPTCHA_ERROR)
                 await redis_client.delete(f'{settings.LOGIN_CAPTCHA_REDIS_PREFIX}:{obj.uuid}')
 
+            user, days_remaining = await self.user_verify(db, obj.username, obj.password)
             await user_dao.update_login_time(db, obj.username)
             await db.refresh(user)
             access_token_data = await create_access_token(
@@ -127,29 +133,11 @@ class AuthService:
             log.error('登陆错误: 用户名不存在')
             raise errors.NotFoundError(msg=e.msg)
         except (errors.RequestError, errors.CustomError) as e:
-            if not user:
-                log.error('登陆错误: 用户密码有误')
-            task = BackgroundTask(
-                login_log_service.create,
-                user_uuid=user.uuid if user else uuid4_str(),
-                username=obj.username,
-                login_time=timezone.now(),
-                status=LoginLogStatusType.fail.value,
-                msg=e.msg,
-            )
-            raise errors.RequestError(code=e.code, msg=e.msg, background=task)
+            raise errors.RequestError(code=e.code, msg=e.msg)
         except Exception as e:
             log.error(f'登陆错误: {e}')
             raise
         else:
-            background_tasks.add_task(
-                login_log_service.create,
-                user_uuid=user.uuid,
-                username=obj.username,
-                login_time=timezone.now(),
-                status=LoginLogStatusType.success.value,
-                msg=t('success.login.success'),
-            )
             data = GetLoginToken(
                 access_token=access_token_data.access_token,
                 access_token_expire_time=access_token_data.access_token_expire_time,

@@ -6,17 +6,9 @@ from sqlalchemy import Select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy_crud_plus import CRUDPlus
 
-from backend.app.admin.model import (
-    User,
-)
-from backend.app.admin.schema.user import (
-    AddOAuth2UserParam,
-    AddUserParam,
-    UpdateUserParam,
-)
+from backend.app.admin.model import User
+from backend.app.admin.schema.user import AddUserParam, UpdateUserParam
 from backend.app.admin.utils.password_security import get_hash_password
-from backend.utils.dynamic_import import import_module_cached
-from backend.utils.serializers import select_join_serialize
 from backend.utils.timezone import timezone
 
 
@@ -72,7 +64,7 @@ class CRUDUser(CRUDPlus[User]):
         :param status: 用户状态
         :return:
         """
-        filters = {}
+        filters: dict[str, Any] = {}
 
         if username:
             filters['username__like'] = f'%{username}%'
@@ -81,11 +73,7 @@ class CRUDUser(CRUDPlus[User]):
         if status is not None:
             filters['status'] = status
 
-        return await self.select_order(
-            'id',
-            'desc',
-            **filters,
-        )
+        return await self.select_order('id', 'desc', **filters)
 
     async def add(self, db: AsyncSession, obj: AddUserParam) -> None:
         """
@@ -98,25 +86,10 @@ class CRUDUser(CRUDPlus[User]):
         salt = bcrypt.gensalt()
         obj.password = get_hash_password(obj.password, salt)
 
-        dict_obj = obj.model_dump(exclude={'roles'})
+        dict_obj = obj.model_dump()
         dict_obj.update({'salt': salt})
         new_user = self.model(**dict_obj)
         db.add(new_user)
-        await db.flush()
-
-    async def add_by_oauth2(self, db: AsyncSession, obj: AddOAuth2UserParam) -> None:
-        """
-        通过 OAuth2 添加用户
-
-        :param db: 数据库会话
-        :param obj: 注册用户参数
-        :return:
-        """
-        dict_obj = obj.model_dump()
-        dict_obj.update({'is_staff': True, 'salt': None})
-        new_user = self.model(**dict_obj)
-        db.add(new_user)
-        await db.flush()
 
     async def update(self, db: AsyncSession, user_id: int, obj: UpdateUserParam) -> int:
         """
@@ -127,8 +100,7 @@ class CRUDUser(CRUDPlus[User]):
         :param obj: 更新用户参数
         :return:
         """
-        count = await self.update_model(db, user_id, obj)
-        return count
+        return await self.update_model(db, user_id, obj)
 
     async def update_login_time(self, db: AsyncSession, username: str) -> int:
         """
@@ -248,46 +220,7 @@ class CRUDUser(CRUDPlus[User]):
         :param user_id: 用户 ID
         :return:
         """
-        try:
-            user_social = import_module_cached('backend.plugin.oauth2.crud.crud_user_social')
-            user_social_dao = user_social.user_social_dao
-        except (ImportError, AttributeError):
-            pass
-        else:
-            await user_social_dao.delete_by_user_id(db, user_id)
-
         return await self.delete_model(db, user_id)
-
-    async def get_join(
-        self,
-        db: AsyncSession,
-        *,
-        user_id: int | None = None,
-        username: str | None = None,
-    ) -> Any | None:
-        """
-        获取用户关联信息
-
-        :param db: 数据库会话
-        :param user_id: 用户 ID
-        :param username: 用户名
-        :return:
-        """
-        filters = {}
-
-        if user_id:
-            filters['id'] = user_id
-        if username:
-            filters['username'] = username
-
-        result = await self.select_models(
-            db,
-            **filters,
-        )
-
-        return select_join_serialize(
-            result,
-        )
 
 
 user_dao: CRUDUser = CRUDUser(User)

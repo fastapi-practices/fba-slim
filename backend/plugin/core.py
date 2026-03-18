@@ -22,8 +22,8 @@ from backend.utils.async_helper import run_await
 from backend.utils.dynamic_import import get_model_objects, import_module_cached
 
 
-@lru_cache
-def get_plugins() -> list[str]:
+@lru_cache(maxsize=128)
+def get_plugins() -> tuple[str, ...]:
     """获取插件列表"""
     plugin_packages = []
 
@@ -37,7 +37,7 @@ def get_plugins() -> list[str]:
         if os.path.isdir(item_path) and '__init__.py' in os.listdir(item_path):
             plugin_packages.append(item)
 
-    return plugin_packages
+    return tuple(plugin_packages)
 
 
 def get_plugin_models() -> list[object]:
@@ -82,6 +82,37 @@ async def get_plugin_sql(plugin: str, db_type: DataBaseType, pk_type: PrimaryKey
     return sql_file
 
 
+async def get_plugin_destroy_sql(plugin: str, db_type: DataBaseType, pk_type: PrimaryKeyType) -> str | None:
+    """
+    获取插件销毁 SQL 脚本
+
+    :param plugin: 插件名称
+    :param db_type: 数据库类型
+    :param pk_type: 主键类型
+    :return:
+    """
+    if db_type == DataBaseType.mysql:
+        mysql_dir = PLUGIN_DIR / plugin / 'sql' / 'mysql'
+        sql_file = (
+            mysql_dir / 'destroy.sql'
+            if pk_type == PrimaryKeyType.autoincrement
+            else mysql_dir / 'destroy_snowflake.sql'
+        )
+    else:
+        postgresql_dir = PLUGIN_DIR / plugin / 'sql' / 'postgresql'
+        sql_file = (
+            postgresql_dir / 'destroy.sql'
+            if pk_type == PrimaryKeyType.autoincrement
+            else postgresql_dir / 'destroy_snowflake.sql'
+        )
+
+    path = anyio.Path(sql_file)
+    if not await path.exists():
+        return None
+
+    return sql_file
+
+
 def load_plugin_config(plugin: str) -> dict[str, Any]:
     """
     加载插件配置
@@ -104,7 +135,7 @@ def parse_plugin_config() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
 
     plugins = get_plugins()
 
-    # 使用独立单例，避免与主线程冲突
+    # 使用独立连接
     current_redis_client = RedisCli()
     run_await(current_redis_client.init)()
 
