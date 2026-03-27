@@ -52,7 +52,7 @@ dnspython==2.8.0
     # via email-validator
 dulwich==1.1.0
     # via fba-slim
-ecdsa==0.19.1
+ecdsa==0.19.2
     # via python-jose
 email-validator==2.3.0
     # via fastapi
