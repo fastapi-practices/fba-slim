@@ -115,7 +115,7 @@ msgspec==0.20.0
     # via fba-slim
 packaging==26.0
     # via pytest
-pillow==12.1.1
+pillow==12.2.0
     # via fast-captcha
 pluggy==1.6.0
     # via pytest
