@@ -150,7 +150,7 @@ pygments==2.19.2
     #   rich
 pyrate-limiter==4.0.2
     # via fba-slim
-pytest==9.0.2
+pytest==9.0.3
     # via pytest-sugar
 pytest-sugar==1.1.1
 python-dotenv==1.2.2
