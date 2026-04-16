@@ -101,7 +101,7 @@ jinja2==3.1.6
     # via fastapi
 loguru==0.7.3
     # via fba-slim
-mako==1.3.10
+mako==1.3.11
     # via alembic
 markdown-it-py==4.0.0
     # via rich
