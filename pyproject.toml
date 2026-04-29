@@ -1,6 +1,6 @@
 [project]
-name = "fba-slim"
-description = "FastAPI 企业级后端架构解决方案（简化版）"
+name = "fastapi-best-architecture"
+description = "FastAPI 企业级后端架构解决方案"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -9,33 +9,56 @@ authors = [
 ]
 dependencies = [
   "alembic>=1.18.4",
+  "asgiref>=3.11.1",
   "asyncmy>=0.2.11",
   "asyncpg>=0.31.0",
   "bcrypt>=5.0.0",
   # If there is a serious problem, we will try `moka-py`
-  "cachebox>=5.2.2",
+  "cachebox>=5.2.3",
   "cappa>=0.31.0",
-  "cryptography>=46.0.5",
-  "dulwich>=1.1.0",
+  "celery>=5.6.3",
+  # When celery version < 6.0.0
+  # https://github.com/celery/celery/issues/7874
+  "celery-aio-pool>=0.1.0rc8",
+  "cryptography>=47.0.0",
+  "dulwich>=1.2.0",
   "fast-captcha>=0.3.2",
-  "fastapi-pagination>=0.15.10",
-  "fastapi[standard-no-fastapi-cloud-cli]>=0.131.0",
-  "granian>=2.7.1",
+  "fastapi-pagination[sqlalchemy]>=0.15.12",
+  "fastapi[standard-no-fastapi-cloud-cli]>=0.136.1",
+  "flower>=2.0.1",
+  "gevent>=25.9.1",
+  "granian>=2.7.4",
   "ip2loc>=1.0.0",
   "itsdangerous>=2.2.0",
+  "jinja2>=3.1.6",
   "loguru>=0.7.3",
-  "msgspec>=0.20.0",
+  "msgspec>=0.21.1",
+  "opentelemetry-exporter-otlp-proto-grpc>=1.41.1",
+  "opentelemetry-instrumentation-asyncio>=0.62b1",
+  "opentelemetry-instrumentation-celery>=0.62b1",
+  "opentelemetry-instrumentation-fastapi>=0.62b1",
+  "opentelemetry-instrumentation-httpx>=0.62b1",
+  "opentelemetry-instrumentation-logging>=0.62b1",
+  "opentelemetry-instrumentation-redis>=0.62b1",
+  "opentelemetry-instrumentation-sqlalchemy>=0.62b1",
+  "opentelemetry-sdk>=1.41.1",
+  "prometheus-client>=0.25.0",
+  "psutil>=7.2.2",
+  # https://github.com/fastapi-practices/fastapi_best_architecture/issues/887
+  "psycopg[binary]==3.2.10",
   "pwdlib>=0.3.0",
-  "pydantic>=2.12.5",
-  "pydantic-settings>=2.13.1",
+  "pydantic>=2.13.3",
+  "pydantic-settings>=2.14.0",
+  "pymysql>=1.1.2",
   "pyrate-limiter>=4.0.2",
   "python-jose>=3.5.0",
-  "redis[hiredis]>=7.2.0",
+  "python-socketio>=5.16.1",
+  "redis[hiredis]>=7.4.0",
   "rtoml>=0.13.0",
-  "sqlalchemy-crud-plus>=1.13.1",
-  "sqlalchemy[asyncio]>=2.0.46",
+  "sqlalchemy-crud-plus>=1.13.2",
+  "sqlalchemy[asyncio]>=2.0.49",
   "sqlparse>=0.5.5",
-  "starlette-context>=0.4.0",
+  "starlette-context>=0.5.1",
   "user-agents>=2.2.0",
 ]
 dynamic = ["version"]
@@ -45,14 +68,14 @@ fba = "backend.cli:main"
 
 [dependency-groups]
 dev = [
-  "pytest>=9.0.2",
+  "pytest>=9.0.3",
   "pytest-sugar>=1.1.1",
 ]
 lint = [
-  "prek>=0.3.3",
+  "prek>=0.3.11",
 ]
 server = [
-  "aio-pika>=9.5.8",
+  "aio-pika>=9.6.1",
   "wait-for-it>=2.3.0",
 ]
 

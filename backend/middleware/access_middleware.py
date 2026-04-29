@@ -5,6 +5,11 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 
 from backend.common.context import ctx
 from backend.common.log import log
+from backend.common.observability.prometheus.fastapi import (
+    inc_fastapi_request,
+    inc_fastapi_request_in_progress,
+)
+from backend.core.conf import settings
 from backend.utils.timezone import timezone
 
 
@@ -19,17 +24,21 @@ class AccessMiddleware(BaseHTTPMiddleware):
         :param call_next: 下一个中间件或路由处理函数
         :return:
         """
-        path = request.url.path
-        method = request.method
-
-        if method != 'OPTIONS':
-            log.debug(f'--> 请求开始[{path if not request.url.query else request.url.path + "/" + request.url.query}]')
-
         perf_time = time.perf_counter()
         ctx.perf_time = perf_time
 
         start_time = timezone.now()
         ctx.start_time = start_time
+
+        path = request.url.path
+        method = request.method
+
+        if method != 'OPTIONS':
+            log.debug(f'--> 请求开始[{path if not request.url.query else request.url.path + "?" + request.url.query}]')
+
+        if path.startswith(settings.FASTAPI_API_V1_PATH):
+            inc_fastapi_request_in_progress(method=method, path=path)
+            inc_fastapi_request(method=method, path=path)
 
         response = await call_next(request)
 
