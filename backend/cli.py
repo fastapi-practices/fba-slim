@@ -28,6 +28,7 @@ from backend.core.path_conf import (
     BASE_PATH,
     ENV_EXAMPLE_FILE_PATH,
     ENV_FILE_PATH,
+    LOCALE_DIR,
     MYSQL_SCRIPT_DIR,
     POSTGRESQL_SCRIPT_DIR,
     RELOAD_LOCK_FILE,
@@ -50,11 +51,17 @@ class CustomReloadFilter(PythonFilter):
     """自定义重载过滤器"""
 
     def __init__(self) -> None:
-        super().__init__(extra_extensions=['.json', '.yaml', '.yml'])
+        self.extra_extensions = ('.json', '.yaml', '.yml')
+        super().__init__(extra_extensions=self.extra_extensions)
 
     def __call__(self, change: Change, path: str) -> bool:
         if RELOAD_LOCK_FILE.exists():
             return False
+
+        file_path = Path(path).resolve()
+        if file_path.suffix in self.extra_extensions and not file_path.is_relative_to(LOCALE_DIR.resolve()):
+            return False
+
         return super().__call__(change, path)
 
 

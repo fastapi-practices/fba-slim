@@ -8,18 +8,18 @@ from backend.app.admin.service.plugin_service import plugin_service
 from backend.common.enums import PluginType
 from backend.common.response.response_code import CustomResponse
 from backend.common.response.response_schema import ResponseModel, ResponseSchemaModel, response_base
-from backend.common.security.jwt import DependsJwtAuth, DependsSuperUser
+from backend.common.security.jwt import DependsSuperUser
 
 router = APIRouter()
 
 
-@router.get('', summary='获取所有插件', dependencies=[DependsJwtAuth])
+@router.get('', summary='获取所有插件', dependencies=[DependsSuperUser])
 async def get_all_plugins() -> ResponseSchemaModel[list[dict[str, Any]]]:
     plugins = await plugin_service.get_all()
     return response_base.success(data=plugins)
 
 
-@router.get('/changed', summary='是否存在插件变更', dependencies=[DependsJwtAuth])
+@router.get('/changed', summary='是否存在插件变更', dependencies=[DependsSuperUser])
 async def plugin_changed() -> ResponseSchemaModel[bool]:
     plugins = await plugin_service.changed()
     return response_base.success(data=bool(plugins))
@@ -58,17 +58,13 @@ async def uninstall_plugin(plugin: Annotated[str, Path(description='插件名称
     )
 
 
-@router.put(
-    '/{plugin}/status',
-    summary='更新插件状态',
-    dependencies=[DependsSuperUser],
-)
+@router.put('/{plugin}/status', summary='更新插件状态', dependencies=[DependsSuperUser])
 async def update_plugin_status(plugin: Annotated[str, Path(description='插件名称')]) -> ResponseModel:
     await plugin_service.update_status(plugin=plugin)
     return response_base.success()
 
 
-@router.get('/{plugin}', summary='下载插件', dependencies=[DependsJwtAuth])
+@router.get('/{plugin}', summary='下载插件', dependencies=[DependsSuperUser])
 async def download_plugin(plugin: Annotated[str, Path(description='插件名称')]) -> StreamingResponse:
     bio = await plugin_service.build(plugin=plugin)
     return StreamingResponse(

@@ -13,6 +13,7 @@ from backend.common.exception import errors
 from backend.core.conf import settings
 from backend.core.path_conf import PLUGIN_DIR
 from backend.database.redis import redis_client
+from backend.plugin.core import get_required_plugins
 from backend.plugin.installer import install_git_plugin, install_zip_plugin, remove_plugin, zip_plugin
 from backend.plugin.requirements import uninstall_requirements_async
 from backend.utils.timezone import timezone
@@ -25,9 +26,19 @@ class PluginService:
     async def get_all() -> list[dict[str, Any]]:
         """获取所有插件"""
 
-        keys = [key async for key in redis_client.scan_iter(f'{settings.PLUGIN_REDIS_PREFIX}:*')]
+        changed_key = f'{settings.PLUGIN_REDIS_PREFIX}:changed'
+        keys = [key async for key in redis_client.scan_iter(f'{settings.PLUGIN_REDIS_PREFIX}:*') if key != changed_key]
+        if not keys:
+            return []
 
-        result = [json.loads(info) for info in await redis_client.mget(*keys)]
+        result = []
+        for info in await redis_client.mget(*keys):
+            if info is None:
+                continue
+
+            plugin_info = json.loads(info)
+            if isinstance(plugin_info, dict):
+                result.append(plugin_info)
 
         return result
 
@@ -66,6 +77,8 @@ class PluginService:
         """
         if settings.ENVIRONMENT != 'dev':
             raise errors.RequestError(msg='禁止在非开发环境下卸载插件')
+        if plugin in get_required_plugins():
+            raise errors.RequestError(msg=f'插件 {plugin} 为必需插件，禁止卸载')
         plugin_dir = anyio.Path(PLUGIN_DIR / plugin)
         if not await plugin_dir.exists():
             raise errors.NotFoundError(msg='插件不存在')
@@ -84,7 +97,8 @@ class PluginService:
         :param plugin: 插件名称
         :return:
         """
-        plugin_info = await redis_client.get(f'{settings.PLUGIN_REDIS_PREFIX}:{plugin}')
+        plugin_key = f'{settings.PLUGIN_REDIS_PREFIX}:{plugin}'
+        plugin_info = await redis_client.get(plugin_key)
         if not plugin_info:
             raise errors.NotFoundError(msg='插件不存在')
         plugin_info = json.loads(plugin_info)
@@ -96,7 +110,8 @@ class PluginService:
             else str(StatusType.disable.value)
         )
         plugin_info['plugin']['enable'] = new_status
-        await redis_client.set(f'{settings.PLUGIN_REDIS_PREFIX}:{plugin}', json.dumps(plugin_info, ensure_ascii=False))
+        await redis_client.set(plugin_key, json.dumps(plugin_info, ensure_ascii=False))
+        await redis_client.set(f'{settings.PLUGIN_REDIS_PREFIX}:changed', 'true')
 
     @staticmethod
     async def build(*, plugin: str) -> io.BytesIO:

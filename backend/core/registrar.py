@@ -14,6 +14,7 @@ from starlette_context.plugins import RequestIdPlugin
 from backend import __version__
 from backend.common.cache.pubsub import cache_pubsub_manager
 from backend.common.exception.exception_handler import register_exception
+from backend.common.lifespan import lifespan_manager
 from backend.common.log import set_custom_logfile, setup_logging
 from backend.common.response.response_code import StandardResponseCode
 from backend.core.conf import settings
@@ -25,13 +26,14 @@ from backend.middleware.i18n_middleware import I18nMiddleware
 from backend.middleware.jwt_auth_middleware import JwtAuthMiddleware
 from backend.middleware.opera_log_middleware import OperaLogMiddleware
 from backend.middleware.state_middleware import StateMiddleware
-from backend.plugin.core import build_final_router
+from backend.plugin.core import build_final_router, setup_plugins
 from backend.utils.demo_mode import demo_site
 from backend.utils.openapi import ensure_unique_route_names, simplify_operation_ids
 from backend.utils.serializers import MsgSpecJSONResponse
 from backend.utils.snowflake import snowflake
 
 
+@lifespan_manager.register
 @asynccontextmanager
 async def register_init(app: FastAPI) -> AsyncGenerator[None, None]:
     """
@@ -47,7 +49,8 @@ async def register_init(app: FastAPI) -> AsyncGenerator[None, None]:
     await redis_client.init()
 
     # 初始化 snowflake 节点
-    await snowflake.init()
+    if settings.SNOWFLAKE_ENABLED or settings.DATABASE_PK_MODE == 'snowflake':
+        await snowflake.init()
 
     # 启动缓存 Pub/Sub 监听器
     cache_pubsub_manager.start_listener()
@@ -58,7 +61,8 @@ async def register_init(app: FastAPI) -> AsyncGenerator[None, None]:
     await cache_pubsub_manager.stop_listener()
 
     # 释放 snowflake 节点
-    await snowflake.shutdown()
+    if settings.SNOWFLAKE_ENABLED or settings.DATABASE_PK_MODE == 'snowflake':
+        await snowflake.shutdown()
 
     # 关闭 redis 连接
     await redis_client.aclose()
@@ -75,7 +79,7 @@ def register_app() -> FastAPI:
         redoc_url=settings.FASTAPI_REDOC_URL,
         openapi_url=settings.FASTAPI_OPENAPI_URL,
         default_response_class=MsgSpecJSONResponse,
-        lifespan=register_init,
+        lifespan=lifespan_manager.build(),
     )
 
     # 注册组件
@@ -85,6 +89,9 @@ def register_app() -> FastAPI:
     register_router(app)
     register_page(app)
     register_exception(app)
+
+    # 初始化插件
+    setup_plugins(app)
 
     return app
 
@@ -149,8 +156,7 @@ def register_middleware(app: FastAPI) -> None:
     )
 
     # CORS
-    # https://github.com/fastapi-practices/fastapi_best_architecture/pull/789/changes
-    # https://github.com/open-telemetry/opentelemetry-python-contrib/issues/4031
+    # https://github.com/fastapi-practices/fastapi-best-architecture/pull/789/changes
     if settings.MIDDLEWARE_CORS:
         app.add_middleware(
             CORSMiddleware,

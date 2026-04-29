@@ -10,9 +10,11 @@ from fastapi.security.utils import get_authorization_scheme_param
 from jose import ExpiredSignatureError, JWTError, jwt
 from pydantic_core import from_json
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.authentication import UnauthenticatedUser
 
 from backend.app.admin.model import User
 from backend.app.admin.schema.user import GetUserInfoDetail
+from backend.common.context import ctx
 from backend.common.dataclasses import AccessToken, NewToken, RefreshToken, TokenPayload
 from backend.common.exception import errors
 from backend.core.conf import settings
@@ -58,7 +60,7 @@ def jwt_decode(token: str) -> TokenPayload:
     except (JWTError, Exception):
         raise errors.TokenError(msg='Token 无效')
     return TokenPayload(
-        id=int(user_id),
+        user_id=int(user_id),
         session_uuid=session_uuid,
         expire_time=timezone.from_datetime(timezone.to_utc(expire)),
     )
@@ -232,20 +234,6 @@ async def get_jwt_user(user_id: int) -> GetUserInfoDetail:
     return user
 
 
-def superuser_verify(request: Request, _token: str = DependsJwtAuth) -> bool:
-    """
-    验证当前用户超级管理员权限
-
-    :param request: FastAPI 请求对象
-    :param _token: JWT 令牌
-    :return:
-    """
-    superuser = request.user.is_superuser
-    if not superuser or not request.user.is_staff:
-        raise errors.AuthorizationError
-    return superuser
-
-
 async def jwt_authentication(token: str) -> GetUserInfoDetail:
     """
     JWT 认证
@@ -254,15 +242,32 @@ async def jwt_authentication(token: str) -> GetUserInfoDetail:
     :return:
     """
     token_payload = jwt_decode(token)
-    user_id = token_payload.id
-    redis_token = await redis_client.get(f'{settings.TOKEN_REDIS_PREFIX}:{user_id}:{token_payload.session_uuid}')
+    ctx.user_id = token_payload.user_id
+    redis_token = await redis_client.get(f'{settings.TOKEN_REDIS_PREFIX}:{ctx.user_id}:{token_payload.session_uuid}')
     if not redis_token:
         raise errors.TokenError(msg='Token 已过期')
 
     if token != redis_token:
         raise errors.TokenError(msg='Token 已失效')
 
-    return await get_jwt_user(user_id)
+    return await get_jwt_user(ctx.user_id)
+
+
+def superuser_verify(request: Request, _token: str = DependsJwtAuth) -> bool:
+    """
+    验证当前用户超级管理员权限
+
+    :param request: FastAPI 请求对象
+    :param _token: JWT 令牌
+    :return:
+    """
+    if isinstance(request.user, UnauthenticatedUser):
+        raise errors.TokenError
+
+    superuser = request.user.is_superuser
+    if not superuser or not request.user.is_staff:
+        raise errors.AuthorizationError
+    return superuser
 
 
 # 超级管理员鉴权依赖注入

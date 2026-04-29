@@ -9,33 +9,34 @@ authors = [
 ]
 dependencies = [
   "alembic>=1.18.4",
+  "asgiref>=3.11.1",
   "asyncmy>=0.2.11",
   "asyncpg>=0.31.0",
   "bcrypt>=5.0.0",
   # If there is a serious problem, we will try `moka-py`
-  "cachebox>=5.2.2",
+  "cachebox>=5.2.3",
   "cappa>=0.31.0",
-  "cryptography>=46.0.5",
-  "dulwich>=1.1.0",
+  "cryptography>=47.0.0",
+  "dulwich>=1.2.0",
   "fast-captcha>=0.3.2",
-  "fastapi-pagination>=0.15.10",
-  "fastapi[standard-no-fastapi-cloud-cli]>=0.131.0",
-  "granian>=2.7.1",
+  "fastapi-pagination[sqlalchemy]>=0.15.12",
+  "fastapi[standard-no-fastapi-cloud-cli]>=0.136.1",
+  "granian>=2.7.4",
   "ip2loc>=1.0.0",
   "itsdangerous>=2.2.0",
   "loguru>=0.7.3",
-  "msgspec>=0.20.0",
+  "msgspec>=0.21.1",
   "pwdlib>=0.3.0",
-  "pydantic>=2.12.5",
-  "pydantic-settings>=2.13.1",
+  "pydantic>=2.13.3",
+  "pydantic-settings>=2.14.0",
   "pyrate-limiter>=4.0.2",
   "python-jose>=3.5.0",
-  "redis[hiredis]>=7.2.0",
+  "redis[hiredis]>=7.4.0",
   "rtoml>=0.13.0",
-  "sqlalchemy-crud-plus>=1.13.1",
-  "sqlalchemy[asyncio]>=2.0.46",
+  "sqlalchemy-crud-plus>=1.13.2",
+  "sqlalchemy[asyncio]>=2.0.49",
   "sqlparse>=0.5.5",
-  "starlette-context>=0.4.0",
+  "starlette-context>=0.5.1",
   "user-agents>=2.2.0",
 ]
 dynamic = ["version"]
@@ -45,14 +46,13 @@ fba = "backend.cli:main"
 
 [dependency-groups]
 dev = [
-  "pytest>=9.0.2",
+  "pytest>=9.0.3",
   "pytest-sugar>=1.1.1",
 ]
 lint = [
-  "prek>=0.3.3",
+  "prek>=0.3.11",
 ]
 server = [
-  "aio-pika>=9.5.8",
   "wait-for-it>=2.3.0",
 ]
 
@@ -219,7 +219,6 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "**/model/*.py" = ["TC003"]
-"backend/common/socketio/server.py" = ["ANN001"]
 "backend/common/exception/exception_handler.py" = ["ANN202", "RUF029"]
 
 [tool.ruff.lint.flake8-pytest-style]

@@ -1,6 +1,6 @@
 import shutil
 
-from functools import lru_cache
+from functools import cache
 from re import Pattern
 from typing import Any, Literal
 
@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     # 数据库
     DATABASE_ECHO: bool | Literal['debug'] = False
     DATABASE_POOL_ECHO: bool | Literal['debug'] = False
-    DATABASE_SCHEMA: str = 'fba-slim'
+    DATABASE_SCHEMA: str = 'fba'
     DATABASE_CHARSET: str = 'utf8mb4'
     DATABASE_PK_MODE: Literal['autoincrement', 'snowflake'] = 'autoincrement'
 
@@ -79,6 +79,7 @@ class Settings(BaseSettings):
     CACHE_PUBSUB_MAX_RECONNECT_ATTEMPTS: int = 10  # 最大重连次数
 
     # .env Snowflake
+    SNOWFLAKE_ENABLED: bool = False
     SNOWFLAKE_DATACENTER_ID: int | None = None
     SNOWFLAKE_WORKER_ID: int | None = None
 
@@ -98,10 +99,10 @@ class Settings(BaseSettings):
     TOKEN_EXTRA_INFO_REDIS_PREFIX: str = 'fba:token_extra_info'
     TOKEN_ONLINE_REDIS_PREFIX: str = 'fba:token_online'
     TOKEN_REFRESH_REDIS_PREFIX: str = 'fba:refresh_token'
-    TOKEN_REQUEST_PATH_EXCLUDE: list[str] = [  # JWT / RBAC 路由白名单
+    TOKEN_REQUEST_PATH_EXCLUDE: list[str] = [  # JWT 路由白名单
         f'{FASTAPI_API_V1_PATH}/auth/login',
     ]
-    TOKEN_REQUEST_PATH_EXCLUDE_PATTERN: list[Pattern[str]] = []  # JWT / RBAC 路由白名单（正则）
+    TOKEN_REQUEST_PATH_EXCLUDE_PATTERN: list[Pattern[str]] = []  # JWT 路由白名单（正则）
 
     # 用户安全
     USER_LOCK_REDIS_PREFIX: str = 'fba:user:lock'
@@ -126,12 +127,6 @@ class Settings(BaseSettings):
     # Cookie
     COOKIE_REFRESH_TOKEN_KEY: str = 'fba_refresh_token'
     COOKIE_REFRESH_TOKEN_EXPIRE_SECONDS: int = 60 * 60 * 24 * 7  # 7 天
-
-    # 插件
-    PLUGIN_PIP_CHINA: bool = True
-    PLUGIN_PIP_INDEX_URL: str = 'https://mirrors.aliyun.com/pypi/simple/'
-    PLUGIN_PIP_MAX_RETRY: int = 3
-    PLUGIN_REDIS_PREFIX: str = 'fba:plugin'
 
     # CORS
     CORS_ALLOWED_ORIGINS: list[str] = [  # 末尾不带斜杠
@@ -192,6 +187,13 @@ class Settings(BaseSettings):
     LOG_ACCESS_FILENAME: str = 'fba_access.log'
     LOG_ERROR_FILENAME: str = 'fba_error.log'
 
+    # Plugin 配置
+    PLUGIN_REQUIRED: list[str] = ['config']
+    PLUGIN_PIP_CHINA: bool = True
+    PLUGIN_PIP_INDEX_URL: str = 'https://mirrors.aliyun.com/pypi/simple/'
+    PLUGIN_PIP_MAX_RETRY: int = 3
+    PLUGIN_REDIS_PREFIX: str = 'fba:plugin'
+
     # I18n 配置
     I18N_DEFAULT_LANGUAGE: str = 'zh-CN'
 
@@ -207,7 +209,7 @@ class Settings(BaseSettings):
         return values
 
 
-@lru_cache
+@cache
 def get_settings() -> Settings:
     """获取全局配置单例"""
     if not ENV_FILE_PATH.exists():

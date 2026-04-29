@@ -118,7 +118,7 @@ def uuid4_str() -> str:
 # SQLA 数据库链接
 SQLALCHEMY_DATABASE_URL = create_database_url()
 
-# SALA 异步引擎和会话
+# SQLA 异步引擎和会话
 async_engine = create_database_async_engine(SQLALCHEMY_DATABASE_URL)
 async_db_session = create_database_async_session(async_engine)
 

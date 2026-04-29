@@ -81,3 +81,11 @@ class PrimaryKeyType(StrEnum):
 
     autoincrement = 'autoincrement'
     snowflake = 'snowflake'
+
+
+class LifespanStage(IntEnum):
+    """lifespan 执行阶段"""
+
+    core = 0
+    plugin = 1
+    tail = 2

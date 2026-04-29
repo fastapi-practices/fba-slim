@@ -38,8 +38,8 @@ async def login(
 
 
 @router.post('/refresh', summary='刷新 token')
-async def refresh_token(db: CurrentSession, request: Request) -> ResponseSchemaModel[GetNewToken]:
-    data = await auth_service.refresh_token(db=db, request=request)
+async def refresh_token(db: CurrentSession, request: Request, response: Response) -> ResponseSchemaModel[GetNewToken]:
+    data = await auth_service.refresh_token(db=db, request=request, response=response)
     return response_base.success(data=data)
 
 
