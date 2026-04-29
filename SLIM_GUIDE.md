@@ -35,7 +35,6 @@
 backend/app/task/                           # Celery 任务系统
 backend/common/socketio/                    # Socket.IO 实时通信
 backend/common/observability/               # Prometheus + OpenTelemetry
-backend/common/prometheus/                  # Prometheus 指标
 backend/app/admin/api/v1/monitor/           # 监控 API (online/redis/server)
 backend/app/admin/tests/                    # 测试文件
 backend/app/admin/api/v1/log/               # 日志 API (login_log/opera_log)
@@ -76,7 +75,6 @@ backend/app/admin/model/data_rule.py
 backend/app/admin/model/data_scope.py
 backend/app/admin/schema/data_rule.py
 backend/app/admin/schema/data_scope.py
-backend/app/admin/schema/monitor.py
 backend/app/admin/crud/crud_data_rule.py
 backend/app/admin/crud/crud_data_scope.py
 backend/app/admin/service/data_rule_service.py
@@ -84,8 +82,14 @@ backend/app/admin/service/data_scope_service.py
 backend/app/admin/api/v1/sys/data_rule.py
 backend/app/admin/api/v1/sys/data_scope.py
 
+# 监控 API
+backend/app/admin/schema/monitor.py
+
 # 可观测性
-backend/utils/otel.py
+backend/common/observability/otel.py
+backend/common/observability/prometheus/fastapi.py
+backend/common/observability/prometheus/queue.py
+backend/common/observability/prometheus/sqlalchemy.py
 
 # 日志系统
 backend/app/admin/model/login_log.py
@@ -141,6 +145,7 @@ deploy/backend/grafana/dashboards/fba_celery.json
 |------------------------------------|------------------------------------------------------------------------------------------------------|
 | `backend/app/admin/utils/cache.py` | 删除 `clear_by_role_id()`/`clear_by_menu_id()`/`clear_by_data_scope_id()`/`clear_by_data_rule_id()` 方法 |
 | `backend/utils/trace_id.py`        | 删除 `OtelTraceIdPlugin` 类                                                                             |
+| `backend/utils/dynamic_config.py`  | 删除邮箱插件相关 `load_email_config()`，仅保留用户安全与登录配置加载                                                           |
 
 ### API 层
 
@@ -169,8 +174,10 @@ deploy/backend/grafana/dashboards/fba_celery.json
 | 文件                          | 修改内容                                                                                                                                       |
 |-----------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|
 | `backend/core/registrar.py` | 删除 socketio/prometheus/otel 导入、`register_socket_app()`、`register_metrics()`、OtelTraceIdPlugin、`create_task(OperaLogMiddleware.consumer())` |
-| `backend/core/conf.py`      | 删除 CELERY/GRAFANA/DATA_PERMISSION/OAUTH2/EMAIL/WS/CODE_GENERATOR/OPERA_LOG_*/RBAC_ROLE_MENU_* 配置段                                          |
-| `backend/main.py`           | 删除插件依赖安装逻辑                                                                                                                                 |
+| `backend/core/conf.py`      | 删除 CELERY/GRAFANA/DATA_PERMISSION/OAUTH2/EMAIL/WS/CODE_GENERATOR/OPERA_LOG_*/RBAC_ROLE_MENU_* 配置段；`PLUGIN_REQUIRED` 仅保留 `config`          |
+| `backend/database/db.py`    | 删除 SQLAlchemy 连接池 Prometheus 指标监听                                                                                                        |
+| `backend/main.py`           | 保留必需插件检测 `check_required_plugins()`，删除插件依赖自动安装逻辑                                                                                         |
+| `backend/plugin/core.py`    | `get_required_plugins()` 删除 RBAC 模式相关 `casbin_rbac` 逻辑                                                                                      |
 
 ### CLI
 
@@ -183,6 +190,7 @@ deploy/backend/grafana/dashboards/fba_celery.json
 | 文件                        | 修改内容                                                                                                                                            |
 |---------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
 | `backend/common/enums.py` | 删除 `MenuType`、`MethodType`、`BuildTreeType`、`RoleDataRuleOperatorType`、`RoleDataRuleExpressionType`、`LoginLogStatusType`、`OperaLogCipherType` 枚举 |
+| `backend/plugin/config/enums.py` | 删除邮箱配置类型 `ConfigType.email`                                                                                                                 |
 
 ### SQL 初始化数据
 
@@ -192,17 +200,20 @@ deploy/backend/grafana/dashboards/fba_celery.json
 | `backend/sql/mysql/init_snowflake_test_data.sql`      | 同上                                                                                |
 | `backend/sql/postgresql/init_test_data.sql`           | 同上                                                                                |
 | `backend/sql/postgresql/init_snowflake_test_data.sql` | 同上                                                                                |
+| `backend/plugin/config/sql/**/init*.sql`              | 删除 `sys_menu` 初始化与 EMAIL 配置，仅保留 `sys_config` 中用户安全/登录配置                         |
+| `backend/plugin/config/sql/**/destroy*.sql`           | 删除 `sys_menu` 清理语句，仅保留 `sys_config` 清理                                            |
 
 ### 配置/部署
 
 | 文件                                          | 修改内容                                                                                 |
 |---------------------------------------------|--------------------------------------------------------------------------------------|
 | `backend/.env.example`                      | 删除 Celery/RabbitMQ/OAuth2/Email 环境变量                                                 |
-| `pyproject.toml`                            | 删除 celery/socketio/opentelemetry/prometheus/psutil/dulwich/flower/gevent/aio-pika 依赖 |
+| `pyproject.toml`                            | 删除 celery/socketio/opentelemetry/prometheus/psutil/flower/gevent/aio-pika 等依赖；保留 `dulwich`（插件 Git 安装仍依赖） |
 | `docker-compose.yml`                        | 删除 rabbitmq/celery/grafana 全套容器                                                      |
-| `Dockerfile`                                | 简化为单一 server 镜像，删除 celery worker/beat/flower 阶段                                      |
+| `Dockerfile`                                | 简化为单一 server 镜像，删除 celery worker/beat/flower 阶段；保留插件依赖预安装步骤，用于打包随镜像发布的插件依赖 |
 | `deploy/backend/docker-compose/.env.docker` | 删除 RabbitMQ/Celery/Grafana 端口映射                                                      |
 | `deploy/backend/docker-compose/.env.server` | 删除 Celery/OAuth2/Email 环境变量                                                          |
+| `deploy/backend/nginx.conf`                 | 删除 Flower 代理配置                                                                       |
 
 ---
 
@@ -210,41 +221,22 @@ deploy/backend/grafana/dashboards/fba_celery.json
 
 从 fba 完整版同步代码到 fba-slim 后，需要关注以下冲突区域：
 
-### 快速检测 grep 模式
+### 快速检测 rg 模式
 
 合并后运行以下命令，快速找出需要处理的非 slim 引用：
 
 ```bash
-# Celery / 任务系统
-grep -rn "celery\|app\.task\|CELERY_" backend/ --include="*.py" | grep -v "__pycache__"
+# 全量残留扫描：唯一可接受命中是 OperaLogMiddleware 导入（控制台日志保留）
+rg -n "celery|CELERY_|app\.task|python-socketio|socketio|prometheus|opentelemetry|psutil|flower|gevent|aio-pika|rabbitmq|GRAFANA_|OAUTH2_|EMAIL_CAPTCHA|CACHE_DICT|RBAC_ROLE_MENU|DATA_PERMISSION|RequestPermission|DependsRBAC|GetUserInfoWithRelation|GetCurrentUserInfoWithRelation|sys_menu|sys_role|sys_dept|data_scope|data_rule|login_log|opera_log" backend pyproject.toml Dockerfile docker-compose.yml deploy -g '!**/__pycache__/**'
 
-# Socket.IO
-grep -rn "socketio\|common\.socketio\|WS_NO_AUTH" backend/ --include="*.py" | grep -v "__pycache__"
+# 精确 DB 日志 / RBAC / 数据权限残留扫描：应无命中
+rg -n "opera_log_service|login_log_service|OPERA_LOG_|batch_dequeue|opera_log_queue|LoginLog|DataRule|DataScope|RequestPermission|DependsRBAC|GetUserInfoWithRelationDetail|CACHE_DICT_REDIS_PREFIX|EMAIL_CAPTCHA_REDIS_PREFIX" backend pyproject.toml Dockerfile docker-compose.yml deploy -g '!**/__pycache__/**'
 
-# 可观测性
-grep -rn "prometheus\|opentelemetry\|otel\|GRAFANA_" backend/ --include="*.py" | grep -v "__pycache__"
-
-# RBAC (角色/菜单/部门/权限)
-grep -rn "DependsRBAC\|RequestPermission\|rbac_verify\|role_menu\|user_role\|dept_dao\|role_dao\|menu_dao\|crud_role\|crud_menu\|crud_dept\|dept_service\|role_service\|menu_service\|GetRoleDetail\|GetDeptDetail\|GetMenuDetail\|build_tree\|GetUserInfoWithRelationDetail\|GetCurrentUserInfoWithRelationDetail\|RBAC_ROLE_MENU" backend/ --include="*.py" | grep -v "__pycache__"
-
-# 数据权限
-grep -rn "DataRule\|DataScope\|data_rule\|data_scope\|role_data_scope\|data_scope_rule\|DataPermissionFilter\|filter_data_permission\|is_filter_scopes" backend/ --include="*.py" | grep -v "__pycache__"
-
-# 已移除的插件
-grep -rn "plugin\.dict\|plugin\.email\|plugin\.notice\|plugin\.oauth2\|plugin\.code_generator" backend/ --include="*.py" | grep -v "__pycache__"
-
-# 监控 API
-grep -rn "monitor_router\|api/v1/monitor\|sys:monitor" backend/ --include="*.py" | grep -v "__pycache__"
-
-# 邮箱验证码
-grep -rn "EMAIL_CAPTCHA_REDIS_PREFIX\|CACHE_DICT_REDIS_PREFIX" backend/ --include="*.py" | grep -v "__pycache__"
-
-# psutil (服务器监控)
-grep -rn "import psutil" backend/ --include="*.py" | grep -v "__pycache__"
-
-# 日志系统 (DB 日志)
-grep -rn "LoginLog\|OperaLog\|login_log\|opera_log\|opera_log_service\|login_log_service\|OPERA_LOG_\|batch_dequeue\|opera_log_queue" backend/ --include="*.py" | grep -v "__pycache__"
+# 已移除依赖残留扫描：应无命中
+rg -n "celery|celery-aio|opentelemetry|prometheus-client|psutil|python-socketio|flower|gevent|aio-pika|psycopg|pymysql" pyproject.toml
 ```
+
+> 注：slim 版仍保留 `backend/middleware/opera_log_middleware.py` 的 `OperaLogMiddleware`，用于控制台访问日志；检测 DB 日志残留时不要把该中间件类名视为问题。
 
 ### 高冲突文件
 
@@ -259,14 +251,25 @@ grep -rn "LoginLog\|OperaLog\|login_log\|opera_log\|opera_log_service\|login_log
 7. **`backend/app/admin/service/auth_service.py`** — 登录日志、menu_dao、background_tasks 差异
 8. **`backend/middleware/opera_log_middleware.py`** — 完整版有 DB 队列，slim 版仅控制台
 9. **`backend/middleware/jwt_auth_middleware.py`** — schema 类型差异
-10. **`pyproject.toml`** — 依赖列表差异
-11. **`docker-compose.yml`** — 容器编排差异
-12. **`Dockerfile`** — 构建阶段差异
+10. **`backend/plugin/config/sql/**`** — config 插件 SQL 不能再引用已删除的 `sys_menu`
+11. **`pyproject.toml`** — 依赖列表差异
+12. **`docker-compose.yml`** — 容器编排差异
+13. **`Dockerfile`** — 构建阶段差异，需保留插件依赖预安装步骤但删除 Celery 多镜像阶段
+14. **`deploy/backend/nginx.conf`** — Flower 代理容易残留
 
 ### 合并策略
 
 1. **优先接受 slim 版本**的文件：`conf.py`、`registrar.py`、`cli.py`、`main.py`、`Dockerfile`、`docker-compose.yml`
 2. **需要手动合并**的文件：CRUD/Service/API 层（可能有新增功能需要保留，但需移除 RBAC/数据权限/可观测性引用）
 3. **直接接受完整版**的文件：不涉及上述移除功能的纯业务逻辑改动
-4. **合并后运行上述 grep 命令**清理残留引用
-5. **运行 `uv lock` 和导入检查**确认无依赖/导入错误
+4. **合并后运行上述 `rg` 命令**清理残留引用
+5. **运行 `fba format` 和导入检查**确认格式、锁文件、导出依赖和导入无误
+
+### 验证清单
+
+瘦身完成后至少运行：
+
+```bash
+fba format
+uv run python -c "from backend.main import app; print(app.title); print(len(app.routes))"
+```
