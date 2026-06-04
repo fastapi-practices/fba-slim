@@ -201,7 +201,7 @@ sqlalchemy-crud-plus==1.13.2
     # via fba-slim
 sqlparse==0.5.5
     # via fba-slim
-starlette==1.0.0
+starlette==1.0.1
     # via
     #   fastapi
     #   starlette-context
