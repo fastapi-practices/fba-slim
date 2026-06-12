@@ -6,7 +6,8 @@ from starlette.authentication import AuthCredentials, AuthenticationBackend
 from starlette.authentication import AuthenticationError as StarletteAuthenticationError
 from starlette.requests import HTTPConnection
 
-from backend.app.admin.schema.user import GetUserInfoDetail
+from backend.app.admin.schema.user import GetUserInfoWithRelationDetail
+from backend.common.context import ctx
 from backend.common.exception.errors import TokenError
 from backend.common.log import log
 from backend.common.security.jwt import jwt_authentication
@@ -49,7 +50,9 @@ class JwtAuthMiddleware(AuthenticationBackend):
         :param exc: 认证错误对象
         :return:
         """
-        return MsgSpecJSONResponse(content={'code': exc.code, 'msg': exc.msg, 'data': None}, status_code=exc.code)
+        content = {'code': exc.code, 'msg': exc.msg, 'data': None}
+        ctx.__request_authentication_exception__ = content
+        return MsgSpecJSONResponse(content=content, status_code=exc.code)
 
     @staticmethod
     def extract_token(request: Request) -> str | None:
@@ -76,7 +79,7 @@ class JwtAuthMiddleware(AuthenticationBackend):
 
         return token
 
-    async def authenticate(self, request: Request) -> tuple[AuthCredentials, GetUserInfoDetail] | None:
+    async def authenticate(self, request: Request) -> tuple[AuthCredentials, GetUserInfoWithRelationDetail] | None:
         """
         认证请求
 

@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.authentication import UnauthenticatedUser
 
 from backend.app.admin.model import User
-from backend.app.admin.schema.user import GetUserInfoDetail
+from backend.app.admin.schema.user import GetUserInfoWithRelationDetail
 from backend.common.context import ctx
 from backend.common.dataclasses import AccessToken, NewToken, RefreshToken, TokenPayload
 from backend.common.exception import errors
@@ -86,18 +86,18 @@ async def create_access_token(user_id: int, *, multi_login: bool, **kwargs) -> A
     if not multi_login:
         await redis_client.delete_prefix(f'{settings.TOKEN_REDIS_PREFIX}:{user_id}')
 
-    await redis_client.setex(
+    await redis_client.set(
         f'{settings.TOKEN_REDIS_PREFIX}:{user_id}:{session_uuid}',
-        settings.TOKEN_EXPIRE_SECONDS,
         access_token,
+        ex=settings.TOKEN_EXPIRE_SECONDS,
     )
 
     # Token 附加信息单独存储
     if kwargs:
-        await redis_client.setex(
+        await redis_client.set(
             f'{settings.TOKEN_EXTRA_INFO_REDIS_PREFIX}:{user_id}:{session_uuid}',
-            settings.TOKEN_EXPIRE_SECONDS,
             json.dumps(kwargs, ensure_ascii=False),
+            ex=settings.TOKEN_EXPIRE_SECONDS,
         )
 
     return AccessToken(access_token=access_token, access_token_expire_time=expire, session_uuid=session_uuid)
@@ -122,10 +122,10 @@ async def create_refresh_token(session_uuid: str, user_id: int, *, multi_login: 
     if not multi_login:
         await redis_client.delete_prefix(f'{settings.TOKEN_REFRESH_REDIS_PREFIX}:{user_id}')
 
-    await redis_client.setex(
+    await redis_client.set(
         f'{settings.TOKEN_REFRESH_REDIS_PREFIX}:{user_id}:{session_uuid}',
-        settings.TOKEN_REFRESH_EXPIRE_SECONDS,
         refresh_token,
+        ex=settings.TOKEN_REFRESH_EXPIRE_SECONDS,
     )
     return RefreshToken(refresh_token=refresh_token, refresh_token_expire_time=expire)
 
@@ -202,15 +202,23 @@ async def get_current_user(db: AsyncSession, pk: int) -> User:
     """
     from backend.app.admin.crud.crud_user import user_dao
 
-    user = await user_dao.get(db, pk)
+    user = await user_dao.get_join(db, user_id=pk)
     if not user:
         raise errors.TokenError(msg='Token 无效')
     if not user.status:
         raise errors.AuthorizationError(msg='用户已被锁定，请联系系统管理员')
+    if user.dept_id and not user.dept:
+        raise errors.AuthorizationError(msg='用户所属部门不存在或已被删除，请联系系统管理员')
+    if user.dept and not user.dept.status:
+        raise errors.AuthorizationError(msg='用户所属部门已被锁定，请联系系统管理员')
+    if user.roles:
+        role_status = [role.status for role in user.roles]
+        if all(status == 0 for status in role_status):
+            raise errors.AuthorizationError(msg='用户所属角色已被锁定，请联系系统管理员')
     return user
 
 
-async def get_jwt_user(user_id: int) -> GetUserInfoDetail:
+async def get_jwt_user(user_id: int) -> GetUserInfoWithRelationDetail:
     """
     获取 JWT 用户
 
@@ -221,20 +229,20 @@ async def get_jwt_user(user_id: int) -> GetUserInfoDetail:
     if not cache_user:
         async with async_db_session() as db:
             current_user = await get_current_user(db, user_id)
-            user = GetUserInfoDetail.model_validate(current_user)
-            await redis_client.setex(
+            user = GetUserInfoWithRelationDetail.model_validate(current_user)
+            await redis_client.set(
                 f'{settings.JWT_USER_REDIS_PREFIX}:{user_id}',
-                settings.TOKEN_EXPIRE_SECONDS,
                 user.model_dump_json(),
+                ex=settings.TOKEN_EXPIRE_SECONDS,
             )
     else:
         # TODO: 在恰当的时机，应替换为使用 model_validate_json
         # https://docs.pydantic.dev/latest/concepts/json/#partial-json-parsing
-        user = GetUserInfoDetail.model_validate(from_json(cache_user, allow_partial=True))
+        user = GetUserInfoWithRelationDetail.model_validate(from_json(cache_user, allow_partial=True))
     return user
 
 
-async def jwt_authentication(token: str) -> GetUserInfoDetail:
+async def jwt_authentication(token: str) -> GetUserInfoWithRelationDetail:
     """
     JWT 认证
 
