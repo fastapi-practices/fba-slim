@@ -82,20 +82,3 @@ async def load_login_config(db: AsyncSession) -> None:
         'LOGIN_CAPTCHA_ENABLED': _to_bool,
     }
     await _load_config(db, 'login', mapping, 'LOGIN_CONFIG_STATUS')
-
-
-async def load_email_config(db: AsyncSession) -> None:
-    """
-    获取邮箱配置
-
-    :param db: 数据库会话
-    :return:
-    """
-    mapping = {
-        'EMAIL_HOST': str,
-        'EMAIL_PORT': int,
-        'EMAIL_SSL': _to_bool,
-        'EMAIL_USERNAME': str,
-        'EMAIL_PASSWORD': str,
-    }
-    await _load_config(db, 'email', mapping, 'EMAIL_CONFIG_STATUS')
