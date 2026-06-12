@@ -43,6 +43,7 @@ class OperaLogMiddleware(BaseHTTPMiddleware):
                 '__request_validation_exception__',
                 '__request_assertion_error__',
                 '__request_custom_exception__',
+                '__request_unknown_exception__',
             ]:
                 exception = ctx.get(exception_key)
                 if exception:

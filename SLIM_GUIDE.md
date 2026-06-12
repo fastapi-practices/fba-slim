@@ -145,7 +145,7 @@ deploy/backend/grafana/dashboards/fba_celery.json
 |------------------------------------|------------------------------------------------------------------------------------------------------|
 | `backend/app/admin/utils/cache.py` | 删除 `clear_by_role_id()`/`clear_by_menu_id()`/`clear_by_data_scope_id()`/`clear_by_data_rule_id()` 方法 |
 | `backend/utils/trace_id.py`        | 删除 `OtelTraceIdPlugin` 类                                                                             |
-| `backend/utils/dynamic_config.py`  | 删除邮箱插件相关 `load_email_config()`，仅保留用户安全与登录配置加载                                                           |
+| `backend/utils/dynamic_config.py`  | 保留上游懒加载 config 插件实现，删除邮箱插件相关 `load_email_config()`，仅保留用户安全与登录配置加载                       |
 
 ### API 层
 
@@ -173,11 +173,13 @@ deploy/backend/grafana/dashboards/fba_celery.json
 
 | 文件                          | 修改内容                                                                                                                                       |
 |-----------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|
-| `backend/core/registrar.py` | 删除 socketio/prometheus/otel 导入、`register_socket_app()`、`register_metrics()`、OtelTraceIdPlugin、`create_task(OperaLogMiddleware.consumer())` |
+| `backend/core/registrar.py` | 删除 socketio/prometheus/otel 导入、`register_socket_app()`、`register_metrics()`、OtelTraceIdPlugin、`create_task(OperaLogMiddleware.consumer())`；保留 lifespan `try/finally` 清理结构 |
 | `backend/core/conf.py`      | 删除 CELERY/GRAFANA/DATA_PERMISSION/OAUTH2/EMAIL/WS/CODE_GENERATOR/OPERA_LOG_*/RBAC_ROLE_MENU_* 配置段；`PLUGIN_REQUIRED` 仅保留 `config`          |
 | `backend/database/db.py`    | 删除 SQLAlchemy 连接池 Prometheus 指标监听                                                                                                        |
-| `backend/main.py`           | 保留必需插件检测 `check_required_plugins()`，删除插件依赖自动安装逻辑                                                                                         |
+| `backend/alembic/env.py`    | 保持上游 `get_database_url()` 命名                                                                                                                |
+| `backend/main.py`           | 保留上游插件准备流程 `_prepare_plugins()`，检查必需插件并安装缺失插件依赖                                                                                         |
 | `backend/plugin/core.py`    | `get_required_plugins()` 删除 RBAC 模式相关 `casbin_rbac` 逻辑                                                                                      |
+| `backend/plugin/hooks.py`   | 保留上游插件 setup/lifespan hooks，删除 OpenTelemetry hook                                                                                         |
 
 ### CLI
 
@@ -217,6 +219,14 @@ deploy/backend/grafana/dashboards/fba_celery.json
 
 ---
 
+## 插件依赖处理约定
+
+- `Dockerfile` 必须保留 `# Preinstall plugin dependencies`，用于镜像构建时为随包插件安装依赖
+- `backend/main.py` 必须保留上游 `_prepare_plugins()`，服务启动时会检查必需插件并安装缺失插件依赖
+- 后续通过插件安装接口安装 zip/git 插件时，仍由 `backend/plugin/requirements.py` 安装该插件依赖
+
+---
+
 ## 合并指南
 
 从 fba 完整版同步代码到 fba-slim 后，需要关注以下冲突区域：
@@ -245,7 +255,7 @@ rg -n "celery|celery-aio|opentelemetry|prometheus-client|psutil|python-socketio|
 1. **`backend/core/conf.py`** — 配置字段差异最大
 2. **`backend/core/registrar.py`** — 中间件和组件注册差异
 3. **`backend/cli.py`** — CLI 命令结构差异大
-4. **`backend/main.py`** — 插件检测逻辑已保留
+4. **`backend/main.py`** — 上游插件准备流程必须保留
 5. **`backend/common/security/jwt.py`** — `GetUserInfoDetail` vs `GetUserInfoWithRelationDetail`，`get_current_user()` 差异
 6. **`backend/app/admin/crud/crud_user.py`** — 无 get_join/JoinConfig/m2m 操作
 7. **`backend/app/admin/service/auth_service.py`** — 登录日志、menu_dao、background_tasks 差异
@@ -259,11 +269,12 @@ rg -n "celery|celery-aio|opentelemetry|prometheus-client|psutil|python-socketio|
 
 ### 合并策略
 
-1. **优先接受 slim 版本**的文件：`conf.py`、`registrar.py`、`cli.py`、`main.py`、`Dockerfile`、`docker-compose.yml`
+1. **以上游新版本为基准**，只按本文档删除标准瘦身项，不要直接用旧 slim 文件覆盖上游正常演进
 2. **需要手动合并**的文件：CRUD/Service/API 层（可能有新增功能需要保留，但需移除 RBAC/数据权限/可观测性引用）
 3. **直接接受完整版**的文件：不涉及上述移除功能的纯业务逻辑改动
 4. **合并后运行上述 `rg` 命令**清理残留引用
-5. **运行 `fba format` 和导入检查**确认格式、锁文件、导出依赖和导入无误
+5. **插件依赖安装保持上游行为**：`backend/main.py` 启动时检测并安装缺失插件依赖，Dockerfile 构建时预装随包插件依赖
+6. **运行 `fba format` 和导入检查**确认格式、锁文件、导出依赖和导入无误
 
 ### 验证清单
 

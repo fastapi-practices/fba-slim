@@ -17,24 +17,24 @@ dependencies = [
   "cachebox>=5.2.3",
   "cappa>=0.31.0",
   "cryptography>=47.0.0",
-  "dulwich>=1.2.0",
+  "dulwich>=1.2.5",
   "fast-captcha>=0.3.2",
-  "fastapi-pagination[sqlalchemy]>=0.15.12",
-  "fastapi[standard-no-fastapi-cloud-cli]>=0.136.1",
-  "granian>=2.7.4",
-  "ip2loc>=1.0.0",
+  "fastapi-pagination[sqlalchemy]>=0.15.13",
+  "fastapi[standard-no-fastapi-cloud-cli]>=0.136.3",
+  "granian>=2.7.5",
   "itsdangerous>=2.2.0",
   "loguru>=0.7.3",
   "msgspec>=0.21.1",
   "pwdlib>=0.3.0",
-  "pydantic>=2.13.3",
-  "pydantic-settings>=2.14.0",
+  "py-ip2region>=3.0.4",
+  "pydantic>=2.13.4",
+  "pydantic-settings>=2.14.1",
   "pyrate-limiter>=4.0.2",
   "python-jose>=3.5.0",
-  "redis[hiredis]>=7.4.0",
+  "redis[hiredis]>=8.0.0",
   "rtoml>=0.13.0",
-  "sqlalchemy-crud-plus>=1.13.2",
-  "sqlalchemy[asyncio]>=2.0.49",
+  "sqlalchemy-crud-plus>=1.13.3",
+  "sqlalchemy[asyncio]>=2.0.50",
   "sqlparse>=0.5.5",
   "starlette-context>=0.5.1",
   "user-agents>=2.2.0",
@@ -50,7 +50,7 @@ dev = [
   "pytest-sugar>=1.1.1",
 ]
 lint = [
-  "prek>=0.3.11",
+  "prek>=0.4.3",
 ]
 server = [
   "wait-for-it>=2.3.0",
@@ -248,7 +248,6 @@ allow-dunder-method-names = ["__tablename__", "__table_args__"]
 
 [tool.ruff.format]
 docstring-code-format = true
-preview = true
 quote-style = "single"
 
 [tool.tombi]

@@ -26,7 +26,8 @@ from backend.middleware.i18n_middleware import I18nMiddleware
 from backend.middleware.jwt_auth_middleware import JwtAuthMiddleware
 from backend.middleware.opera_log_middleware import OperaLogMiddleware
 from backend.middleware.state_middleware import StateMiddleware
-from backend.plugin.core import build_final_router, setup_plugins
+from backend.plugin.hooks import register_plugin_hooks
+from backend.plugin.router import build_final_router
 from backend.utils.demo_mode import demo_site
 from backend.utils.openapi import ensure_unique_route_names, simplify_operation_ids
 from backend.utils.serializers import MsgSpecJSONResponse
@@ -55,17 +56,18 @@ async def register_init(app: FastAPI) -> AsyncGenerator[None, None]:
     # 启动缓存 Pub/Sub 监听器
     cache_pubsub_manager.start_listener()
 
-    yield
+    try:
+        yield
+    finally:
+        # 停止缓存 Pub/Sub 监听器
+        await cache_pubsub_manager.stop_listener()
 
-    # 停止缓存 Pub/Sub 监听器
-    await cache_pubsub_manager.stop_listener()
+        # 释放 snowflake 节点
+        if settings.SNOWFLAKE_ENABLED or settings.DATABASE_PK_MODE == 'snowflake':
+            await snowflake.shutdown()
 
-    # 释放 snowflake 节点
-    if settings.SNOWFLAKE_ENABLED or settings.DATABASE_PK_MODE == 'snowflake':
-        await snowflake.shutdown()
-
-    # 关闭 redis 连接
-    await redis_client.aclose()
+        # 关闭 redis 连接
+        await redis_client.aclose()
 
 
 def register_app() -> FastAPI:
@@ -90,8 +92,8 @@ def register_app() -> FastAPI:
     register_page(app)
     register_exception(app)
 
-    # 初始化插件
-    setup_plugins(app)
+    # 注册插件钩子
+    register_plugin_hooks(app)
 
     return app
 

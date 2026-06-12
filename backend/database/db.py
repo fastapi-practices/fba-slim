@@ -1,7 +1,7 @@
 import sys
 
 from collections.abc import AsyncGenerator
-from typing import Annotated, Any
+from typing import Annotated, Any, TypeAlias
 from uuid import uuid4
 
 from fastapi import Depends
@@ -19,7 +19,7 @@ from backend.common.model import MappedBase
 from backend.core.conf import settings
 
 
-def create_database_url(*, unittest: bool = False, with_database: bool = True) -> URL:
+def get_database_url(*, unittest: bool = False, with_database: bool = True) -> URL:
     """
     创建数据库链接
 
@@ -115,13 +115,10 @@ def uuid4_str() -> str:
     return str(uuid4())
 
 
-# SQLA 数据库链接
-SQLALCHEMY_DATABASE_URL = create_database_url()
-
 # SQLA 异步引擎和会话
-async_engine = create_database_async_engine(SQLALCHEMY_DATABASE_URL)
+async_engine = create_database_async_engine(get_database_url())
 async_db_session = create_database_async_session(async_engine)
 
 # Session Annotated
-CurrentSession = Annotated[AsyncSession, Depends(get_db)]
-CurrentSessionTransaction = Annotated[AsyncSession, Depends(get_db_transaction)]
+CurrentSession: TypeAlias = Annotated[AsyncSession, Depends(get_db)]
+CurrentSessionTransaction: TypeAlias = Annotated[AsyncSession, Depends(get_db_transaction)]
