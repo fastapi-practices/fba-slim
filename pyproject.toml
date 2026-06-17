@@ -16,7 +16,7 @@ dependencies = [
   # If there is a serious problem, we will try `moka-py`
   "cachebox>=5.2.3",
   "cappa>=0.31.0",
-  "cryptography>=47.0.0",
+  "cryptography>=48.0.1",
   "dulwich>=1.2.5",
   "fast-captcha>=0.3.2",
   "fastapi-pagination[sqlalchemy]>=0.15.13",
