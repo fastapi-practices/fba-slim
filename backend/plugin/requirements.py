@@ -22,7 +22,7 @@ def _is_in_virtualenv() -> bool:
     return hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix)
 
 
-def _requirements_installed(requirements_file: Path) -> bool:  # noqa: C901
+def _requirements_installed(requirements_file: Path) -> bool:  # ruff:ignore[complex-structure]
     """检查 requirements 及其 extras 子依赖是否已安装"""
     requirements = []
     for line in requirements_file.read_text(encoding='utf-8').splitlines():
@@ -71,7 +71,7 @@ def _requirements_installed(requirements_file: Path) -> bool:  # noqa: C901
     return all(requirement_satisfied(requirement) for requirement in requirements)
 
 
-def install_requirements(plugin: str | None) -> None:  # noqa: C901
+def install_requirements(plugin: str | None) -> None:  # ruff:ignore[complex-structure]
     """
     安装插件依赖
 
@@ -85,11 +85,17 @@ def install_requirements(plugin: str | None) -> None:  # noqa: C901
         if not requirements_file.exists() or _requirements_installed(requirements_file):
             continue
 
-        pip_install = ['uv', 'pip', 'install', '-r', requirements_file]
+        pip_install = ['uv', 'pip', 'install', '-r', str(requirements_file), '--prerelease=allow']
         if not _is_in_virtualenv():
             pip_install.append('--system')
         if settings.PLUGIN_PIP_CHINA:
-            pip_install.extend(['-i', settings.PLUGIN_PIP_INDEX_URL])
+            # 将国内源作为优先索引，同时保留 PyPI 作为回退来源
+            pip_install.extend([
+                '--index',
+                settings.PLUGIN_PIP_INDEX_URL,
+                '--index-strategy',
+                'unsafe-best-match',
+            ])
 
         max_retries = settings.PLUGIN_PIP_MAX_RETRY
         for attempt in range(max_retries):

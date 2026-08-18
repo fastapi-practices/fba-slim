@@ -1,10 +1,12 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Body, Path, Query
+from fastapi import APIRouter, Body, Depends, Path, Query
 
 from backend.common.pagination import DependsPagination, PageData
 from backend.common.response.response_schema import ResponseModel, ResponseSchemaModel, response_base
-from backend.common.security.jwt import DependsJwtAuth, DependsSuperUser
+from backend.common.security.jwt import DependsJwtAuth
+from backend.common.security.permission import RequestPermission
+from backend.common.security.rbac import DependsRBAC
 from backend.database.db import CurrentSession, CurrentSessionTransaction
 from backend.plugin.config.schema.config import (
     CreateConfigParam,
@@ -54,14 +56,17 @@ async def get_configs_paginated(
 @router.post(
     '',
     summary='创建参数配置',
-    dependencies=[DependsSuperUser],
+    dependencies=[
+        Depends(RequestPermission('sys:config:add')),
+        DependsRBAC,
+    ],
 )
 async def create_config(db: CurrentSessionTransaction, obj: CreateConfigParam) -> ResponseModel:
     await config_service.create(db=db, obj=obj)
     return response_base.success()
 
 
-@router.put('', summary='批量更新参数配置', dependencies=[DependsSuperUser])
+@router.put('', summary='批量更新参数配置', dependencies=[Depends(RequestPermission('sys.config.edits')), DependsRBAC])
 async def bulk_update_config(db: CurrentSessionTransaction, objs: list[UpdateConfigsParam]) -> ResponseModel:
     count = await config_service.bulk_update(db=db, objs=objs)
     if count > 0:
@@ -72,7 +77,10 @@ async def bulk_update_config(db: CurrentSessionTransaction, objs: list[UpdateCon
 @router.put(
     '/{pk}',
     summary='更新参数配置',
-    dependencies=[DependsSuperUser],
+    dependencies=[
+        Depends(RequestPermission('sys:config:edit')),
+        DependsRBAC,
+    ],
 )
 async def update_config(
     db: CurrentSessionTransaction, pk: Annotated[int, Path(description='参数配置 ID')], obj: UpdateConfigParam
@@ -86,7 +94,10 @@ async def update_config(
 @router.delete(
     '',
     summary='批量删除参数配置',
-    dependencies=[DependsSuperUser],
+    dependencies=[
+        Depends(RequestPermission('sys:config:del')),
+        DependsRBAC,
+    ],
 )
 async def delete_configs(
     db: CurrentSessionTransaction, pks: Annotated[list[int], Body(description='参数配置 ID 列表')]

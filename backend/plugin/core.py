@@ -31,7 +31,10 @@ def check_plugin_installed(plugin_name: str) -> bool:
 
 def get_required_plugins() -> tuple[str, ...]:
     """获取必需插件列表"""
-    return tuple(settings.PLUGIN_REQUIRED)
+    required_plugins = list(settings.PLUGIN_REQUIRED)
+    if not settings.RBAC_ROLE_MENU_MODE and 'casbin_rbac' not in required_plugins:
+        required_plugins.append('casbin_rbac')
+    return tuple(required_plugins)
 
 
 def check_required_plugins() -> None:
@@ -112,9 +115,9 @@ def parse_plugin_config() -> tuple[list[PluginEntry], list[PluginEntry]]:
     try:
         # 清理未知插件信息
         exclude_keys = [f'{settings.PLUGIN_REDIS_PREFIX}:{key}' for key in plugins]
-        run_await(current_redis_client.delete_prefix)(
+        run_await(current_redis_client.delete_by_prefix)(
             settings.PLUGIN_REDIS_PREFIX,
-            exclude=exclude_keys,
+            exclude_keys=exclude_keys,
         )
 
         for plugin in plugins:
@@ -127,18 +130,23 @@ def parse_plugin_config() -> tuple[list[PluginEntry], list[PluginEntry]]:
             plugin_cache_info = run_await(current_redis_client.get)(plugin_cache_key)
             plugin_config['plugin']['enable'] = get_plugin_enable(plugin_cache_info, StatusType.enable.value)
 
-            plugin_entry = PluginEntry(
-                name=plugin,
-                depends_on=plugin_config['plugin'].get('depends_on'),
-                extend=plugin_config['app']['extend'] if plugin_type == PluginLevelType.extend else None,
-                routers=plugin_config['app']['router'] if plugin_type == PluginLevelType.app else None,
-                api=plugin_config['api'] if plugin_type == PluginLevelType.extend else None,
-            )
-
             if plugin_type == PluginLevelType.extend:
-                extend_plugins.append(plugin_entry)
-            else:
-                app_plugins.append(plugin_entry)
+                extend_plugins.append(
+                    PluginEntry(
+                        name=plugin,
+                        depends_on=plugin_config['plugin'].get('depends_on'),
+                        extend=plugin_config['app']['extend'],
+                        api=plugin_config['api'],
+                    )
+                )
+            elif plugin_type == PluginLevelType.app:
+                app_plugins.append(
+                    PluginEntry(
+                        name=plugin,
+                        depends_on=plugin_config['plugin'].get('depends_on'),
+                        routers=plugin_config['app']['router'],
+                    )
+                )
 
             # 缓存最新插件信息
             run_await(current_redis_client.set)(plugin_cache_key, json.dumps(plugin_config, ensure_ascii=False))

@@ -1,11 +1,13 @@
 import sys
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Mapping
+from contextlib import AbstractAsyncContextManager
+from functools import partial
 from typing import Annotated, Any, TypeAlias
 from uuid import uuid4
 
 from fastapi import Depends
-from sqlalchemy import URL
+from sqlalchemy import URL, event
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -16,6 +18,7 @@ from sqlalchemy.ext.asyncio import (
 from backend.common.enums import DataBaseType
 from backend.common.log import log
 from backend.common.model import MappedBase
+from backend.common.observability.prometheus.sqlalchemy import observe_sqlalchemy_pool_connections
 from backend.core.conf import settings
 
 
@@ -71,29 +74,73 @@ def create_database_async_engine(url: str | URL) -> AsyncEngine:
         sys.exit()
 
 
-def create_database_async_session(engine: AsyncEngine) -> async_sessionmaker[AsyncSession | Any]:
-    """
-    创建数据库异步会话
+class DatabaseAsyncSessionMaker:
+    """按数据源名选择对应的 async_sessionmaker"""
 
-    :param engine: 数据库异步引擎
+    def __init__(self, makers: Mapping[str, async_sessionmaker[AsyncSession]]) -> None:
+        if 'default' not in makers:
+            raise ValueError('会话工厂必须包含 default 数据源')
+        self._makers = dict(makers)
+
+    def _get_maker(self, source: str) -> async_sessionmaker[AsyncSession]:
+        """
+        获取指定数据源的会话工厂
+
+        :param source: 数据源名称
+        :return:
+        """
+        try:
+            return self._makers[source]
+        except KeyError as e:
+            raise ValueError(f'未知数据库数据源: {source}') from e
+
+    def __call__(self, source: str = 'default', **kwargs: Any) -> AsyncSession:
+        """
+        创建数据库会话
+
+        :param source: 数据源名称
+        :return:
+        """
+        return self._get_maker(source)(**kwargs)
+
+    def begin(self, source: str = 'default') -> AbstractAsyncContextManager[AsyncSession]:
+        """
+        创建会话并开启事务，退出时提交并关闭
+
+        :param source: 数据源名称
+        :return:
+        """
+        return self._get_maker(source).begin()
+
+
+def create_database_async_session(
+    async_engine: AsyncEngine,
+    *,
+    source_binds: Mapping[str, AsyncEngine] | None = None,
+) -> DatabaseAsyncSessionMaker:
+    """
+    创建支持命名数据源的数据库异步会话
+
+    :param async_engine: 默认数据源异步引擎
+    :param source_binds: 额外数据源异步引擎
     :return:
     """
-    return async_sessionmaker(
-        bind=engine,
-        class_=AsyncSession,
-        autoflush=False,  # 禁用自动刷新
-        expire_on_commit=False,  # 禁用提交时过期
-    )
+    engines = dict(source_binds or {})
+    engines.setdefault('default', async_engine)
+    return DatabaseAsyncSessionMaker({
+        source: async_sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+        for source, engine in engines.items()
+    })
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """获取数据库会话"""
+    """获取默认数据源会话"""
     async with async_db_session() as session:
         yield session
 
 
 async def get_db_transaction() -> AsyncGenerator[AsyncSession, None]:
-    """获取带有事务的数据库会话"""
+    """获取默认数据源事务会话"""
     async with async_db_session.begin() as session:
         yield session
 
@@ -117,7 +164,43 @@ def uuid4_str() -> str:
 
 # SQLA 异步引擎和会话
 async_engine = create_database_async_engine(get_database_url())
-async_db_session = create_database_async_session(async_engine)
+_database_engines: dict[str, AsyncEngine] = {'default': async_engine}
+for source, url in settings.DATABASE_SOURCES.items():
+    if not source or source == 'default':
+        raise ValueError('DATABASE_SOURCES 数据源名称不能为空且不能为 default')
+    _database_engines[source] = create_database_async_engine(url)
+
+async_db_session = create_database_async_session(async_engine, source_binds=_database_engines)
+
+
+def get_database_engines() -> Mapping[str, AsyncEngine]:
+    """获取所有数据库引擎"""
+    return _database_engines
+
+
+async def dispose_database() -> None:
+    """释放所有数据库连接池"""
+    for engine in _database_engines.values():
+        await engine.dispose()
+
+
+# SQLA 连接池指标监听
+for source, engine in _database_engines.items():
+    event.listen(
+        engine.sync_engine.pool,
+        'connect',
+        partial(observe_sqlalchemy_pool_connections, pool=engine.sync_engine.pool, source=source),
+    )
+    event.listen(
+        engine.sync_engine.pool,
+        'checkout',
+        partial(observe_sqlalchemy_pool_connections, pool=engine.sync_engine.pool, source=source),
+    )
+    event.listen(
+        engine.sync_engine.pool,
+        'checkin',
+        partial(observe_sqlalchemy_pool_connections, pool=engine.sync_engine.pool, source=source),
+    )
 
 # Session Annotated
 CurrentSession: TypeAlias = Annotated[AsyncSession, Depends(get_db)]

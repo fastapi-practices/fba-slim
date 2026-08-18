@@ -6,7 +6,7 @@ from starlette.authentication import AuthCredentials, AuthenticationBackend
 from starlette.authentication import AuthenticationError as StarletteAuthenticationError
 from starlette.requests import HTTPConnection
 
-from backend.app.admin.schema.user import GetUserInfoDetail
+from backend.app.admin.schema.user import GetUserInfoWithRelationDetail
 from backend.common.context import ctx
 from backend.common.exception.errors import TokenError
 from backend.common.log import log
@@ -79,7 +79,7 @@ class JwtAuthMiddleware(AuthenticationBackend):
 
         return token
 
-    async def authenticate(self, request: Request) -> tuple[AuthCredentials, GetUserInfoDetail] | None:
+    async def authenticate(self, request: Request) -> tuple[AuthCredentials, GetUserInfoWithRelationDetail] | None:
         """
         认证请求
 
@@ -93,7 +93,10 @@ class JwtAuthMiddleware(AuthenticationBackend):
         try:
             user = await jwt_authentication(token)
         except TokenError as exc:
-            raise AuthenticationError(code=exc.code, msg=exc.detail, headers=exc.headers)
+            if settings.TOKEN_REQUEST_UNDERLYING_SECURITY:
+                raise AuthenticationError(code=exc.code, msg=exc.detail, headers=exc.headers)
+            ctx.__request_jwt_authentication_exception__ = exc
+            return None
         except Exception as e:
             log.exception(f'JWT 授权异常：{e}')
             raise AuthenticationError(code=getattr(e, 'code', 500), msg=getattr(e, 'msg', 'Internal Server Error'))
