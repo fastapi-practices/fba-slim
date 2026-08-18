@@ -116,3 +116,37 @@ services:
       - fba_static_upload:/www/fba_server/backend/static/upload
     networks:
       - fba_network
+
+#  # 如果服务器内存小于 4GB，CPU 小于四个内核
+#  # 建议通过前端工程单独构建此容器或在本地进行构建
+#  fba_ui:
+#    build:
+#      context: /root/fastapi_best_architecture_ui
+#      dockerfile: Dockerfile
+#    image: fba_ui:latest
+#    ports:
+#      - "80:80"
+#      - "443:443"
+#    container_name: fba_ui
+#    restart: always
+#    depends_on:
+#      - fba_server
+#    command:
+#      - nginx
+#      - -g
+#      - daemon off;
+#    volumes:
+#      # nginx https conf
+#      # 通过 docker 进行部署时，需要打开此配置项并确保<挂载到容器内的证书文件路径>配置
+#      # 与 nginx conf 中的 ssl 证书文件路径配置一致，如果你直接将 ssl 证书文件 cp
+#      # 到了 docker 容器内，则无需挂载证书文件，直接将它们注释或删除即可
+#      # local_ssl_pem_path：你在服务器存放 ssl pem 证书文件的路径，自行修改
+#      # local_ssl_key_path: 你在服务器存放 ssl key 证书文件的路径，自行修改
+#      # /etc/ssl/xxx.pem：挂载到容器内 ssl pem 证书文件的路径，自行修改
+#      # /etc/ssl/xxx.key：挂载到容器内 ssl key 证书文件的路径，自行修改
+#      - local_ssl_pem_path:/etc/ssl/xxx.pem
+#      - local_ssl_key_path:/etc/ssl/xxx.key
+#      - fba_static:/www/fba_server/backend/static
+#      - fba_static_upload:/www/fba_server/backend/static/upload
+#    networks:
+#      - fba_network

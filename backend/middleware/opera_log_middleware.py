@@ -39,6 +39,7 @@ class OperaLogMiddleware(BaseHTTPMiddleware):
             elapsed = round((time.perf_counter() - ctx.perf_time) * 1000, 3)
 
             for exception_key in [
+                '__request_authentication_exception__',
                 '__request_http_exception__',
                 '__request_validation_exception__',
                 '__request_assertion_error__',

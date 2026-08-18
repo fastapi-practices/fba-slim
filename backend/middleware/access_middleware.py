@@ -26,9 +26,8 @@ class AccessMiddleware(BaseHTTPMiddleware):
         ctx.start_time = start_time
 
         path = request.url.path
-        method = request.method
 
-        if method != 'OPTIONS':
+        if request.method != 'OPTIONS':
             log.debug(f'--> 请求开始[{path if not request.url.query else request.url.path + "?" + request.url.query}]')
 
         response = await call_next(request)

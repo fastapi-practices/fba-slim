@@ -136,7 +136,7 @@ deploy/backend/grafana/dashboards/fba_celery.json
 
 | 文件                                          | 修改内容                                                                              |
 |---------------------------------------------|-----------------------------------------------------------------------------------|
-| `backend/app/admin/service/user_service.py` | 删除 `get_roles()` 方法、dept/role 验证逻辑、`dept` 参数；`get_userinfo()` 改用 `user_dao.get()` |
+| `backend/app/admin/service/user_service.py` | 删除 `get_roles()` 方法、dept/role 验证逻辑、`dept` 参数；`get_userinfo()` 改用 `user_dao.get()`/`get_by_username()`；`update_email()` 删除邮箱验证码（email 插件已移除），保留邮箱唯一性校验 |
 | `backend/app/admin/service/auth_service.py` | 删除 `login_log_service`/`menu_dao` 引用、`get_codes()` 方法、`background_tasks` 参数       |
 
 ### Utils/安全层
@@ -151,7 +151,7 @@ deploy/backend/grafana/dashboards/fba_celery.json
 
 | 文件                                           | 修改内容                                                                                            |
 |----------------------------------------------|-------------------------------------------------------------------------------------------------|
-| `backend/app/admin/api/v1/sys/user.py`       | 删除 `get_user_roles` 路由、`dept` 参数；`delete_user` 改用 `DependsSuperUser`；响应类型改为 `GetUserInfoDetail` |
+| `backend/app/admin/api/v1/sys/user.py`       | 删除 `get_user_roles` 路由、`dept` 参数、`update_user_email` 的 captcha 参数；`delete_user` 改用 `DependsSuperUser`；响应类型改为 `GetUserInfoDetail` |
 | `backend/app/admin/api/v1/sys/file.py`       | `RequestPermission + DependsRBAC` 改为 `DependsJwtAuth`                                           |
 | `backend/app/admin/api/v1/sys/__init__.py`   | 仅保留 `user_router`、`file_router`、`plugin_router`                                                 |
 | `backend/app/admin/api/v1/auth/auth.py`      | 删除 `get_codes` 路由、`background_tasks` 参数                                                         |
@@ -164,17 +164,17 @@ deploy/backend/grafana/dashboards/fba_celery.json
 
 | 文件                                           | 修改内容                                                                                                             |
 |----------------------------------------------|------------------------------------------------------------------------------------------------------------------|
-| `backend/common/security/jwt.py`             | `GetUserInfoWithRelationDetail` → `GetUserInfoDetail`；`get_current_user()` 改用 `user_dao.get()`，删除 dept/role 状态检查 |
+| `backend/common/security/jwt.py`             | `GetUserInfoWithRelationDetail` → `GetUserInfoDetail`；`get_current_user()` 改用 `user_dao.get()`，删除 dept/role 状态检查；保留上游 `jwt_authentication_verify` 与 `TOKEN_REQUEST_UNDERLYING_SECURITY` |
 | `backend/middleware/jwt_auth_middleware.py`  | `GetUserInfoWithRelationDetail` → `GetUserInfoDetail`                                                            |
-| `backend/middleware/opera_log_middleware.py` | 移除 DB 队列/消费者/入库，改为纯控制台日志输出                                                                                       |
+| `backend/middleware/opera_log_middleware.py` | 移除 DB 队列/消费者/入库，改为纯控制台日志输出；异常码读取需包含 `__request_authentication_exception__` |
 | `backend/middleware/access_middleware.py`    | 删除 Prometheus 导入和 2 处计数器调用                                                                                       |
 
 ### 核心层
 
 | 文件                          | 修改内容                                                                                                                                       |
 |-----------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|
-| `backend/core/registrar.py` | 删除 socketio/prometheus/otel 导入、`register_socket_app()`、`register_metrics()`、OtelTraceIdPlugin、`create_task(OperaLogMiddleware.consumer())`；保留 lifespan `try/finally` 清理结构 |
-| `backend/core/conf.py`      | 删除 CELERY/GRAFANA/DATA_PERMISSION/OAUTH2/EMAIL/WS/CODE_GENERATOR/OPERA_LOG_*/RBAC_ROLE_MENU_* 配置段；`PLUGIN_REQUIRED` 仅保留 `config`          |
+| `backend/core/registrar.py` | 删除 socketio/prometheus/otel 导入、`register_socket_app()`、`register_metrics()`、OtelTraceIdPlugin、`create_task(OperaLogMiddleware.consumer())`；保留 lifespan `try/finally` 与上游 `dispose_database()` |
+| `backend/core/conf.py`      | 删除 CELERY/GRAFANA/DATA_PERMISSION/OAUTH2/EMAIL/WS/CODE_GENERATOR/OPERA_LOG_*/RBAC_ROLE_MENU_*/CACHE_DICT_* 配置段；保留 `DATABASE_SOURCES`、`TOKEN_REQUEST_UNDERLYING_SECURITY`；`PLUGIN_REQUIRED` 仅保留 `config` |
 | `backend/database/db.py`    | 删除 SQLAlchemy 连接池 Prometheus 指标监听                                                                                                        |
 | `backend/alembic/env.py`    | 保持上游 `get_database_url()` 命名                                                                                                                |
 | `backend/main.py`           | 保留上游插件准备流程 `_prepare_plugins()`，检查必需插件并安装缺失插件依赖                                                                                         |
@@ -185,14 +185,14 @@ deploy/backend/grafana/dashboards/fba_celery.json
 
 | 文件               | 修改内容                                                                             |
 |------------------|----------------------------------------------------------------------------------|
-| `backend/cli.py` | 删除 Celery/插件安装卸载/代码生成相关命令，`FbaCli.subcmd` 简化为 `Init \| Run \| Format \| Alembic` |
+| `backend/cli.py` | 删除 Celery/代码生成相关命令，保留插件安装卸载与依赖同步；`FbaCli.subcmd` 为 `Init \| Run \| Add \| Remove \| Deps \| Format \| Alembic` |
 
 ### Enum
 
 | 文件                        | 修改内容                                                                                                                                            |
 |---------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
-| `backend/common/enums.py` | 删除 `MenuType`、`MethodType`、`BuildTreeType`、`RoleDataRuleOperatorType`、`RoleDataRuleExpressionType`、`LoginLogStatusType`、`OperaLogCipherType` 枚举 |
-| `backend/plugin/config/enums.py` | 删除邮箱配置类型 `ConfigType.email`                                                                                                                 |
+| `backend/common/enums.py` | 删除 `MenuType`、`MethodType`、`BuildTreeType`、`RoleDataRuleOperatorType`、`RoleDataRuleExpressionType`、`LoginLogStatusType`、`OperaLogCipherType` 枚举；保留上游 `PluginLevelType.capability` |
+| `backend/plugin/config/enums.py` | 删除邮箱配置类型 `ConfigType.email`；保留上游 `ConfigType.ai` |
 
 ### SQL 初始化数据
 
@@ -209,8 +209,9 @@ deploy/backend/grafana/dashboards/fba_celery.json
 
 | 文件                                          | 修改内容                                                                                 |
 |---------------------------------------------|--------------------------------------------------------------------------------------|
-| `backend/.env.example`                      | 删除 Celery/RabbitMQ/OAuth2/Email 环境变量                                                 |
-| `pyproject.toml`                            | 删除 celery/socketio/opentelemetry/prometheus/psutil/flower/gevent/aio-pika 等依赖；保留 `dulwich`（插件 Git 安装仍依赖） |
+| `backend/.env.example`                      | 删除 Celery/RabbitMQ/OAuth2/Email 环境变量；保留 `DATABASE_SOURCES` |
+| `pyproject.toml`                            | 项目名改为 `fba-slim`；删除 celery/socketio/opentelemetry/prometheus/psutil/flower/gevent/aio-pika/jinja2/psycopg/pymysql 等依赖；保留 `dulwich`（插件 Git 安装仍依赖） |
+| `README.md` / `README.zh-CN.md`             | 使用 slim 专用说明，并指向完整版仓库 |
 | `docker-compose.yml`                        | 删除 rabbitmq/celery/grafana 全套容器                                                      |
 | `Dockerfile`                                | 简化为单一 server 镜像，删除 celery worker/beat/flower 阶段；保留插件依赖预安装步骤，用于打包随镜像发布的插件依赖 |
 | `deploy/backend/docker-compose/.env.docker` | 删除 RabbitMQ/Celery/Grafana 端口映射                                                      |
@@ -237,7 +238,7 @@ deploy/backend/grafana/dashboards/fba_celery.json
 
 ```bash
 # 全量残留扫描：唯一可接受命中是 OperaLogMiddleware 导入（控制台日志保留）
-rg -n "celery|CELERY_|app\.task|python-socketio|socketio|prometheus|opentelemetry|psutil|flower|gevent|aio-pika|rabbitmq|GRAFANA_|OAUTH2_|EMAIL_CAPTCHA|CACHE_DICT|RBAC_ROLE_MENU|DATA_PERMISSION|RequestPermission|DependsRBAC|GetUserInfoWithRelation|GetCurrentUserInfoWithRelation|sys_menu|sys_role|sys_dept|data_scope|data_rule|login_log|opera_log" backend pyproject.toml Dockerfile docker-compose.yml deploy -g '!**/__pycache__/**'
+rg -n "celery|CELERY_|app\.task|python-socketio|socketio|prometheus|opentelemetry|psutil|flower|gevent|aio-pika|rabbitmq|GRAFANA_|OAUTH2_|EMAIL_CAPTCHA|CACHE_DICT|RBAC_ROLE_MENU|DATA_PERMISSION|RequestPermission|DependsRBAC|GetUserInfoWithRelation|GetCurrentUserInfoWithRelation|sys_menu|sys_role|sys_dept|data_scope|data_rule|login_log|opera_log|casbin_rbac|OtelTraceIdPlugin|init_plugin_otel|AddOAuth2UserParam" backend pyproject.toml Dockerfile docker-compose.yml deploy -g '!**/__pycache__/**'
 
 # 精确 DB 日志 / RBAC / 数据权限残留扫描：应无命中
 rg -n "opera_log_service|login_log_service|OPERA_LOG_|batch_dequeue|opera_log_queue|LoginLog|DataRule|DataScope|RequestPermission|DependsRBAC|GetUserInfoWithRelationDetail|CACHE_DICT_REDIS_PREFIX|EMAIL_CAPTCHA_REDIS_PREFIX" backend pyproject.toml Dockerfile docker-compose.yml deploy -g '!**/__pycache__/**'
@@ -254,7 +255,7 @@ rg -n "celery|celery-aio|opentelemetry|prometheus-client|psutil|python-socketio|
 
 1. **`backend/core/conf.py`** — 配置字段差异最大
 2. **`backend/core/registrar.py`** — 中间件和组件注册差异
-3. **`backend/cli.py`** — CLI 命令结构差异大
+3. **`backend/cli.py`** — 删除 Celery/代码生成命令，保留插件 `Add`/`Remove`/`Deps`
 4. **`backend/main.py`** — 上游插件准备流程必须保留
 5. **`backend/common/security/jwt.py`** — `GetUserInfoDetail` vs `GetUserInfoWithRelationDetail`，`get_current_user()` 差异
 6. **`backend/app/admin/crud/crud_user.py`** — 无 get_join/JoinConfig/m2m 操作
@@ -275,6 +276,7 @@ rg -n "celery|celery-aio|opentelemetry|prometheus-client|psutil|python-socketio|
 4. **合并后运行上述 `rg` 命令**清理残留引用
 5. **插件依赖安装保持上游行为**：`backend/main.py` 启动时检测并安装缺失插件依赖，Dockerfile 构建时预装随包插件依赖
 6. **运行 `fba format` 和导入检查**确认格式、锁文件、导出依赖和导入无误
+7. **插件 CLI 必须保留**：插件核心系统完整保留，因此 `fba add` / `fba remove` / `fba deps` 与插件安装 API 一并保留；不要再删除插件安装卸载命令
 
 ### 验证清单
 
@@ -282,5 +284,7 @@ rg -n "celery|celery-aio|opentelemetry|prometheus-client|psutil|python-socketio|
 
 ```bash
 fba format
-uv run python -c "from backend.main import app; print(app.title); print(len(app.routes))"
+uv run python -c "from backend.main import app; print(app.title); print(sorted(app.openapi()['paths']))"
 ```
+
+> FastAPI 0.141+ 将 `include_router` 存为嵌套 `_IncludedRouter`，`len(app.routes)` 不再等于接口数量；请用 OpenAPI paths 核对。精简版应只有 auth/user/file/plugin/config，不应出现 role/menu/dept/log/monitor/task。

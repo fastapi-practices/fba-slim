@@ -56,8 +56,7 @@ class UserService:
         :return:
         """
         user_select = await user_dao.get_select(username=username, phone=phone, status=status)
-        data = await paging_data(db, user_select)
-        return data
+        return await paging_data(db, user_select)
 
     @staticmethod
     async def create(*, db: AsyncSession, obj: AddUserParam) -> None:
@@ -70,6 +69,8 @@ class UserService:
         """
         if await user_dao.get_by_username(db, obj.username):
             raise errors.ConflictError(msg='用户名已注册')
+        if obj.email and await user_dao.check_email(db, obj.email):
+            raise errors.ConflictError(msg='邮箱已被绑定')
         if not obj.password:
             raise errors.RequestError(msg='密码不允许为空')
         obj.nickname = obj.nickname or obj.username
@@ -90,12 +91,16 @@ class UserService:
             raise errors.NotFoundError(msg='用户不存在')
         if obj.username != user.username and await user_dao.get_by_username(db, obj.username):
             raise errors.ConflictError(msg='用户名已注册')
+        if obj.email and obj.email != user.email:
+            email_user = await user_dao.check_email(db, obj.email)
+            if email_user:
+                raise errors.ConflictError(msg='邮箱已被绑定')
         count = await user_dao.update(db, user.id, obj)
         await redis_client.delete(f'{settings.JWT_USER_REDIS_PREFIX}:{user.id}')
         return count
 
     @staticmethod
-    async def update_permission(*, db: AsyncSession, request: Request, pk: int, type: UserPermissionType) -> int:  # noqa: C901
+    async def update_permission(*, db: AsyncSession, request: Request, pk: int, type: UserPermissionType) -> int:  # ruff:ignore[complex-structure]
         """
         更新用户权限
 
@@ -137,16 +142,18 @@ class UserService:
                 token = get_token(request)
                 token_payload = jwt_decode(token)
                 if pk == user.id:
+                    # 系统管理员修改自身时，除当前 token 外，其他 token 失效
                     if not new_multi_login:
                         key_prefix = f'{settings.TOKEN_REDIS_PREFIX}:{user.id}'
-                        await redis_client.delete_prefix(
+                        await redis_client.delete_by_prefix(
                             key_prefix,
-                            exclude=f'{key_prefix}:{token_payload.session_uuid}',
+                            exclude_keys=f'{key_prefix}:{token_payload.session_uuid}',
                         )
                 else:
+                    # 系统管理员修改他人时，他人 token 全部失效
                     if not new_multi_login:
                         key_prefix = f'{settings.TOKEN_REDIS_PREFIX}:{user.id}'
-                        await redis_client.delete_prefix(key_prefix)
+                        await redis_client.delete_by_prefix(key_prefix)
             case _:
                 raise errors.RequestError(msg='权限类型不存在')
 
@@ -173,14 +180,9 @@ class UserService:
         history_obj = CreateUserPasswordHistoryParam(user_id=user.id, password=user.password)
         await password_security_service.save_password_history(db, history_obj)
         await user_dao.update_password_changed_time(db, user.id)
-
-        key_prefix = [
-            f'{settings.TOKEN_REDIS_PREFIX}:{user.id}',
-            f'{settings.TOKEN_REFRESH_REDIS_PREFIX}:{user.id}',
-            f'{settings.JWT_USER_REDIS_PREFIX}:{user.id}',
-        ]
-        for prefix in key_prefix:
-            await redis_client.delete_prefix(prefix)
+        await redis_client.delete_by_prefix(f'{settings.TOKEN_REDIS_PREFIX}:{user.id}')
+        await redis_client.delete_by_prefix(f'{settings.TOKEN_REFRESH_REDIS_PREFIX}:{user.id}')
+        await redis_client.delete_by_prefix(f'{settings.JWT_USER_REDIS_PREFIX}:{user.id}')
         return count
 
     @staticmethod
@@ -221,6 +223,9 @@ class UserService:
         :param email: 邮箱
         :return:
         """
+        email_user = await user_dao.check_email(db, email)
+        if email_user and email_user.id != user_id:
+            raise errors.ConflictError(msg='邮箱已被绑定')
         count = await user_dao.update_email(db, user_id, email)
         await redis_client.delete(f'{settings.JWT_USER_REDIS_PREFIX}:{user_id}')
         return count
@@ -249,14 +254,9 @@ class UserService:
         history_obj = CreateUserPasswordHistoryParam(user_id=user.id, password=user.password)
         await password_security_service.save_password_history(db, history_obj)
         await user_dao.update_password_changed_time(db, user.id)
-
-        key_prefix = [
-            f'{settings.TOKEN_REDIS_PREFIX}:{user_id}',
-            f'{settings.TOKEN_REFRESH_REDIS_PREFIX}:{user_id}',
-            f'{settings.JWT_USER_REDIS_PREFIX}:{user_id}',
-        ]
-        for prefix in key_prefix:
-            await redis_client.delete_prefix(prefix)
+        await redis_client.delete_by_prefix(f'{settings.TOKEN_REDIS_PREFIX}:{user_id}')
+        await redis_client.delete_by_prefix(f'{settings.TOKEN_REFRESH_REDIS_PREFIX}:{user_id}')
+        await redis_client.delete_by_prefix(f'{settings.JWT_USER_REDIS_PREFIX}:{user_id}')
         return count
 
     @staticmethod
@@ -272,13 +272,9 @@ class UserService:
         if not user:
             raise errors.NotFoundError(msg='用户不存在')
         count = await user_dao.delete(db, user.id)
-        key_prefix = [
-            f'{settings.TOKEN_REDIS_PREFIX}:{user.id}',
-            f'{settings.TOKEN_REFRESH_REDIS_PREFIX}:{user.id}',
-            f'{settings.JWT_USER_REDIS_PREFIX}:{user.id}',
-        ]
-        for key in key_prefix:
-            await redis_client.delete_prefix(key)
+        await redis_client.delete_by_prefix(f'{settings.TOKEN_REDIS_PREFIX}:{user.id}')
+        await redis_client.delete_by_prefix(f'{settings.TOKEN_REFRESH_REDIS_PREFIX}:{user.id}')
+        await redis_client.delete_by_prefix(f'{settings.JWT_USER_REDIS_PREFIX}:{user.id}')
         return count
 
 

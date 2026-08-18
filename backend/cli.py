@@ -14,14 +14,18 @@ import granian
 
 from cappa.output import error_format
 from rich.panel import Panel
-from rich.prompt import Prompt
+from rich.prompt import IntPrompt, Prompt
+from rich.table import Table
 from rich.text import Text
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
+from starlette.concurrency import run_in_threadpool
 from watchfiles import Change, PythonFilter
 
 from backend import __version__
-from backend.common.enums import DataBaseType
+from backend.common.dataclasses import PluginEntry
+from backend.common.enums import DataBaseType, PrimaryKeyType
+from backend.common.exception.errors import BaseExceptionError
 from backend.common.model import MappedBase
 from backend.core.conf import settings
 from backend.core.path_conf import (
@@ -30,6 +34,7 @@ from backend.core.path_conf import (
     ENV_FILE_PATH,
     LOCALE_DIR,
     MYSQL_SCRIPT_DIR,
+    PLUGIN_DIR,
     POSTGRESQL_SCRIPT_DIR,
     RELOAD_LOCK_FILE,
 )
@@ -42,10 +47,19 @@ from backend.database.db import (
 from backend.database.redis import RedisCli, redis_client
 from backend.plugin.core import (
     get_plugins,
+    get_required_plugins,
+    load_plugin_config,
+    resolve_plugin_order,
 )
-from backend.plugin.sql import build_sql_filename, get_plugin_sql
+from backend.plugin.installer import install_git_frontend_plugin, install_git_plugin, install_zip_plugin, zip_plugin
+from backend.plugin.installer import remove_plugin as _remove_plugin
+from backend.plugin.requirements import install_requirements_async, uninstall_requirements_async
+from backend.plugin.sql import build_sql_filename, get_plugin_destroy_sql, get_plugin_sql
+from backend.plugin.validator import validate_plugin_config
 from backend.utils.console import console
+from backend.utils.dynamic_import import import_module_cached
 from backend.utils.sql_parser import parse_sql_script
+from backend.utils.timezone import timezone
 
 _OUTPUT_HELP: Final = "\n更多信息，尝试 '[cyan]--help[/]'"
 
@@ -220,7 +234,7 @@ async def init(db: AsyncSession, redis: RedisCli) -> None:
     """交互式初始化数据库表结构和数据"""
     panel_content = _build_db_config_panel_content()
     pk_details = panel_content.from_markup(
-        '[link=https://fastapi-practices.github.io/fastapi_best_architecture_docs/backend/reference/pk.html]（了解详情）[/]'
+        '[link=https://docs.fba.wu-clan.cc/fastapi_best_architecture_docs/backend/reference/pk.html]（了解详情）[/]'
     )
     panel_content.append(pk_details)
     panel_content.append('\n\n【Redis 配置】', style='bold green')
@@ -250,7 +264,7 @@ async def init(db: AsyncSession, redis: RedisCli) -> None:
                 settings.TOKEN_REDIS_PREFIX,
                 settings.TOKEN_REFRESH_REDIS_PREFIX,
             ]:
-                await redis.delete_prefix(prefix)
+                await redis.delete_by_prefix(prefix)
 
             console.note('重建数据库表')
             conn = await db.connection()
@@ -271,7 +285,7 @@ async def init(db: AsyncSession, redis: RedisCli) -> None:
         console.warning('已取消初始化操作')
 
 
-def run(host: str, port: int, reload: bool, workers: int) -> None:  # noqa: FBT001
+def run(host: str, port: int, reload: bool, workers: int) -> None:  # ruff:ignore[boolean-type-hint-positional-argument]
     """启动 API 服务"""
     url = f'http://{host}:{port}'
     docs_url = url + settings.FASTAPI_DOCS_URL
@@ -302,7 +316,7 @@ def run(host: str, port: int, reload: bool, workers: int) -> None:  # noqa: FBT0
         panel_content.append(f'\n📡 OpenAPI JSON: {openapi_url}', style='bold magenta')
 
     panel_content.append('\n🌐 架构官方文档: ', style='bold magenta')
-    panel_content.append('https://fastapi-practices.github.io/fastapi_best_architecture_docs/')
+    panel_content.append('https://docs.fba.wu-clan.cc/fastapi_best_architecture_docs/')
 
     console.print(Panel(panel_content, title=f'fba (v{__version__})', border_style='purple', padding=(1, 2)))
     granian.Granian(
@@ -314,6 +328,175 @@ def run(host: str, port: int, reload: bool, workers: int) -> None:  # noqa: FBT0
         reload_filter=CustomReloadFilter,
         workers=workers,
     ).serve()
+
+
+async def install_plugin(  # ruff:ignore[complex-structure]
+    path: str | None,
+    repo_url: str | None,
+    frontend: bool,  # ruff:ignore[boolean-type-hint-positional-argument]
+    no_sql: bool,  # ruff:ignore[boolean-type-hint-positional-argument]
+    db_type: DataBaseType,
+    pk_type: PrimaryKeyType,
+) -> None:
+    """安装插件"""
+    if settings.ENVIRONMENT != 'dev':
+        raise cappa.Exit('插件安装仅在开发环境可用', code=1)
+
+    plugin_name = None
+    console.note('开始安装插件...')
+
+    try:
+        if frontend:
+            if repo_url is None:
+                raise cappa.Exit('前端插件仅允许通过 Git 仓库地址安装', code=1)
+
+            frontend_project_root = Prompt.ask('请输入前端项目根路径')
+            plugin_name = await install_git_frontend_plugin(repo_url, frontend_project_root)
+            console.tip(f'前端插件 {plugin_name} 安装成功')
+            return
+
+        if path is None and repo_url is None:
+            raise cappa.Exit('path 或 repo_url 必须指定其中一项', code=1)
+        if path and repo_url:
+            raise cappa.Exit('path 和 repo_url 不能同时指定', code=1)
+
+        if path:
+            plugin_name = await install_zip_plugin(file=path)
+        if repo_url:
+            plugin_name = await install_git_plugin(repo_url=repo_url)
+
+        console.tip(f'插件 {plugin_name} 安装成功')
+
+        console.note(f'正在同步插件 {plugin_name} 数据库表...')
+        try:
+            import_module_cached(f'backend.plugin.{plugin_name}.model')
+        except ModuleNotFoundError:
+            pass
+        else:
+            async with async_db_session.begin() as db:
+                conn = await db.connection()
+                await conn.run_sync(MappedBase.metadata.create_all)
+
+        if not no_sql:
+            sql_file = await get_plugin_sql(plugin_name, db_type, pk_type)
+            if sql_file:
+                console.info(f'正在执行插件 {plugin_name} 初始化 SQL 脚本：{sql_file}')
+                async with async_db_session.begin() as db:
+                    await execute_sql_scripts(db, sql_file)
+            else:
+                console.warning(f'插件 {plugin_name} 未提供初始化 SQL 脚本，跳过数据库初始化')
+
+    except Exception as e:
+        raise cappa.Exit(e.msg if isinstance(e, BaseExceptionError) else str(e), code=1)
+
+
+def should_sync_plugin_deps(plugin: str | None, *, allow_empty: bool) -> bool:
+    """检查是否需要同步插件依赖"""
+    plugins = get_plugins()
+    if plugin is not None and plugin not in plugins:
+        raise cappa.Exit(f'插件 {plugin} 不存在', code=1)
+    if not plugins:
+        if allow_empty:
+            console.warning('当前没有已安装的插件，跳过插件依赖同步')
+            return False
+        raise cappa.Exit('当前没有已安装的插件', code=1)
+    return True
+
+
+async def sync_project_deps() -> None:
+    """同步项目依赖"""
+    console.note('正在同步项目依赖...')
+    try:
+        await run_in_threadpool(subprocess.run, ['uv', 'sync'], cwd=BASE_PATH.parent, check=True)
+    except FileNotFoundError:
+        raise cappa.Exit('uv 未安装，请先安装 uv', code=1)
+    except subprocess.CalledProcessError as e:
+        raise cappa.Exit('项目依赖同步失败', code=e.returncode)
+    console.tip('项目依赖同步完成')
+
+
+async def sync_plugin_deps(plugin: str | None = None) -> None:
+    """同步插件依赖"""
+    console.note(f'正在安装插件 {plugin} 依赖...' if plugin else '正在安装所有插件依赖...')
+    try:
+        await install_requirements_async(plugin)
+    except Exception as e:
+        raise cappa.Exit(e.msg if isinstance(e, BaseExceptionError) else str(e), code=1)
+    console.tip(f'插件 {plugin} 依赖安装完成' if plugin else '所有插件依赖安装完成')
+
+
+async def sync_deps(plugin: str | None, *, no_project: bool = False, no_plugin: bool = False) -> None:
+    """同步项目和插件依赖"""
+    if no_project and no_plugin:
+        raise cappa.Exit('--no-project 和 --no-plugin 不能同时使用', code=1)
+    if plugin is not None and no_plugin:
+        raise cappa.Exit('--plugin 和 --no-plugin 不能同时使用', code=1)
+
+    should_sync_plugins = False if no_plugin else should_sync_plugin_deps(plugin, allow_empty=not no_project)
+    if not no_project:
+        await sync_project_deps()
+    if should_sync_plugins:
+        await sync_plugin_deps(plugin)
+
+
+async def remove_plugin(plugin: str | None, *, no_sql: bool = False) -> None:  # ruff:ignore[complex-structure]
+    """卸载插件"""
+    if settings.ENVIRONMENT != 'dev':
+        raise cappa.Exit('插件卸载仅在开发环境可用', code=1)
+
+    async def remove() -> None:
+        plugin_dir = PLUGIN_DIR / plugin
+        if not plugin_dir.exists():
+            raise cappa.Exit(f'插件 {plugin} 不存在', code=1)
+
+        if not no_sql:
+            destroy_sql_file = await get_plugin_destroy_sql(plugin, settings.DATABASE_TYPE, settings.DATABASE_PK_MODE)
+            if destroy_sql_file:
+                console.note(f'正在执行插件 {plugin} 销毁 SQL 脚本：{destroy_sql_file}')
+                async with async_db_session.begin() as db:
+                    await execute_destroy_sql_scripts(db, destroy_sql_file)
+            else:
+                console.warning(f'插件 {plugin} 未提供销毁 SQL 脚本，跳过数据库清理')
+
+        console.note(f'正在卸载插件 {plugin} 依赖...')
+        await uninstall_requirements_async(plugin)
+
+        console.note(f'正在备份插件 {plugin}...')
+        backup_file = PLUGIN_DIR / f'{plugin}.{timezone.now().strftime("%Y%m%d%H%M%S")}.backup.zip'
+        await run_in_threadpool(zip_plugin, plugin_dir, backup_file)
+        await run_in_threadpool(_remove_plugin, plugin_dir)
+
+        console.note(f'备份文件：{backup_file}')
+        console.tip(f'插件 {plugin} 卸载成功')
+        console.print()
+        console.warning('请根据插件说明（README.md）移除相关配置并重启服务')
+
+    plugins = get_plugins()
+    if not plugins:
+        raise cappa.Exit('当前没有已安装的插件', code=1)
+
+    if not plugin:
+        table = Table(show_header=True, header_style='bold magenta')
+        table.add_column('编号', style='cyan', no_wrap=True, justify='center')
+        table.add_column('插件名称', style='green', no_wrap=True)
+
+        for idx, name in enumerate(plugins, 1):
+            table.add_row(str(idx), name)
+
+        console.print(table)
+        choice = IntPrompt.ask('请选择要卸载的插件编号', choices=[str(i) for i in range(1, len(plugins) + 1)])
+        plugin = plugins[choice - 1]
+    else:
+        if plugin not in plugins:
+            raise cappa.Exit(f'插件 {plugin} 不存在', code=1)
+
+    if plugin in get_required_plugins():
+        raise cappa.Exit(f'插件 {plugin} 为必需插件，禁止卸载', code=1)
+
+    try:
+        await remove()
+    except Exception as e:
+        raise cappa.Exit(f'插件卸载失败：{e}', code=1)
 
 
 async def get_sql_scripts() -> list[str]:
@@ -329,8 +512,14 @@ async def get_sql_scripts() -> list[str]:
     if await anyio.Path(main_sql_file).exists():
         sql_scripts.append(str(main_sql_file))
 
+    plugins = []
     for plugin in get_plugins():
-        plugin_sql = await get_plugin_sql(plugin, settings.DATABASE_TYPE, settings.DATABASE_PK_MODE)
+        plugin_config = load_plugin_config(plugin)
+        validate_plugin_config(plugin, plugin_config)
+        plugins.append(PluginEntry(name=plugin, depends_on=plugin_config['plugin'].get('depends_on')))
+
+    for plugin in resolve_plugin_order(plugins):
+        plugin_sql = await get_plugin_sql(plugin.name, settings.DATABASE_TYPE, settings.DATABASE_PK_MODE)
         if plugin_sql:
             sql_scripts.append(plugin_sql)
 
@@ -349,6 +538,19 @@ async def execute_sql_scripts(db: AsyncSession, sql_scripts: str, *, is_init: bo
 
     if not is_init:
         console.tip('SQL 脚本已执行完成')
+
+
+async def execute_destroy_sql_scripts(db: AsyncSession, sql_scripts: str) -> None:
+    """执行插件销毁 SQL 脚本"""
+    try:
+        stmts = await parse_sql_script(sql_scripts, is_destroy=True)
+        conn = await db.connection()
+        for stmt in stmts:
+            await conn.exec_driver_sql(stmt)
+    except Exception as e:
+        raise cappa.Exit(f'销毁 SQL 脚本执行失败：{e}', code=1)
+
+    console.tip('销毁 SQL 脚本已执行完成')
 
 
 def run_alembic(*args: str) -> None:
@@ -401,6 +603,74 @@ class Run:
 
     def __call__(self) -> None:
         run(host=self.host, port=self.port, reload=self.no_reload, workers=self.workers)
+
+
+@cappa.command(help='新增插件', default_long=True)
+@dataclass
+class Add:
+    path: Annotated[
+        str | None,
+        cappa.Arg(default=None, help='ZIP 插件的本地完整路径'),
+    ]
+    repo_url: Annotated[
+        str | None,
+        cappa.Arg(default=None, help='Git 插件的仓库地址'),
+    ]
+    frontend: Annotated[
+        bool,
+        cappa.Arg(short='-f', default=False, help='安装前端插件'),
+    ]
+    no_sql: Annotated[
+        bool,
+        cappa.Arg(default=False, help='禁用插件 SQL 脚本自动执行'),
+    ]
+    db_type: Annotated[
+        DataBaseType,
+        cappa.Arg(default=settings.DATABASE_TYPE, help='执行插件 SQL 脚本的数据库类型'),
+    ]
+    pk_type: Annotated[
+        PrimaryKeyType,
+        cappa.Arg(default=settings.DATABASE_PK_MODE, help='执行插件 SQL 脚本数据库主键类型'),
+    ]
+
+    async def __call__(self) -> None:
+        await install_plugin(self.path, self.repo_url, self.frontend, self.no_sql, self.db_type, self.pk_type)
+
+
+@cappa.command(help='移除插件')
+@dataclass
+class Remove:
+    plugin: Annotated[
+        str | None,
+        cappa.Arg(default=None, help='要移除的插件名称'),
+    ]
+    no_sql: Annotated[
+        bool,
+        cappa.Arg(default=False, help='禁用插件销毁 SQL 脚本自动执行'),
+    ]
+
+    async def __call__(self) -> None:
+        await remove_plugin(self.plugin, no_sql=self.no_sql)
+
+
+@cappa.command(help='同步项目和插件依赖', default_long=True)
+@dataclass
+class Deps:
+    plugin: Annotated[
+        str | None,
+        cappa.Arg(default=None, help='指定插件名称，不指定则同步所有插件依赖'),
+    ]
+    no_project: Annotated[
+        bool,
+        cappa.Arg(default=False, help='跳过项目依赖同步'),
+    ]
+    no_plugin: Annotated[
+        bool,
+        cappa.Arg(default=False, help='跳过插件依赖同步'),
+    ]
+
+    async def __call__(self) -> None:
+        await sync_deps(self.plugin, no_project=self.no_project, no_plugin=self.no_plugin)
 
 
 @cappa.command(help='格式化代码')
@@ -527,7 +797,7 @@ class FbaCli:
         str,
         cappa.Arg(value_name='PATH', default='', show_default=False, help='在事务中执行 SQL 脚本'),
     ]
-    subcmd: cappa.Subcommands[Init | Run | Format | Alembic | None] = None
+    subcmd: cappa.Subcommands[Init | Run | Add | Remove | Deps | Format | Alembic | None] = None
 
     async def __call__(self) -> None:
         if self.sql:

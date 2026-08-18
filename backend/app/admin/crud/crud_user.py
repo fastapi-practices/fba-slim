@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import Any
 
 import bcrypt
@@ -23,7 +24,7 @@ class CRUDUser(CRUDPlus[User]):
         :param user_id: 用户 ID
         :return:
         """
-        return await self.select_model(db, user_id)
+        return await self.select_model(db, user_id, deleted=0)
 
     async def get_by_username(self, db: AsyncSession, username: str) -> User | None:
         """
@@ -33,7 +34,17 @@ class CRUDUser(CRUDPlus[User]):
         :param username: 用户名
         :return:
         """
-        return await self.select_model_by_column(db, username=username)
+        return await self.select_model_by_column(db, username=username, deleted=0)
+
+    async def get_all_by_usernames(self, db: AsyncSession, usernames: list[str]) -> Sequence[User]:
+        """
+        通过用户名列表批量获取用户
+
+        :param db: 数据库会话
+        :param usernames: 用户名列表
+        :return:
+        """
+        return await self.select_models(db, username__in=usernames, deleted=0)
 
     async def get_by_nickname(self, db: AsyncSession, nickname: str) -> User | None:
         """
@@ -43,7 +54,7 @@ class CRUDUser(CRUDPlus[User]):
         :param nickname: 用户昵称
         :return:
         """
-        return await self.select_model_by_column(db, nickname=nickname)
+        return await self.select_model_by_column(db, nickname=nickname, deleted=0)
 
     async def check_email(self, db: AsyncSession, email: str) -> User | None:
         """
@@ -53,7 +64,7 @@ class CRUDUser(CRUDPlus[User]):
         :param email: 电子邮箱
         :return:
         """
-        return await self.select_model_by_column(db, email=email)
+        return await self.select_model_by_column(db, email=email, deleted=0)
 
     async def get_select(self, username: str | None, phone: str | None, status: int | None) -> Select:
         """
@@ -64,7 +75,7 @@ class CRUDUser(CRUDPlus[User]):
         :param status: 用户状态
         :return:
         """
-        filters: dict[str, Any] = {}
+        filters: dict[str, Any] = {'deleted': 0}
 
         if username:
             filters['username__like'] = f'%{username}%'
@@ -100,7 +111,7 @@ class CRUDUser(CRUDPlus[User]):
         :param obj: 更新用户参数
         :return:
         """
-        return await self.update_model(db, user_id, obj)
+        return await self.update_model_by_column(db, obj, id=user_id, deleted=0)
 
     async def update_login_time(self, db: AsyncSession, username: str) -> int:
         """
@@ -110,7 +121,7 @@ class CRUDUser(CRUDPlus[User]):
         :param username: 用户名
         :return:
         """
-        return await self.update_model_by_column(db, {'last_login_time': timezone.now()}, username=username)
+        return await self.update_model_by_column(db, {'last_login_time': timezone.now()}, username=username, deleted=0)
 
     async def update_password_changed_time(self, db: AsyncSession, user_id: int) -> int:
         """
@@ -120,7 +131,9 @@ class CRUDUser(CRUDPlus[User]):
         :param user_id: 用户 ID
         :return:
         """
-        return await self.update_model(db, user_id, {'last_password_changed_time': timezone.now()})
+        return await self.update_model_by_column(
+            db, {'last_password_changed_time': timezone.now()}, id=user_id, deleted=0
+        )
 
     async def update_nickname(self, db: AsyncSession, user_id: int, nickname: str) -> int:
         """
@@ -131,7 +144,7 @@ class CRUDUser(CRUDPlus[User]):
         :param nickname: 用户昵称
         :return:
         """
-        return await self.update_model(db, user_id, {'nickname': nickname})
+        return await self.update_model_by_column(db, {'nickname': nickname}, id=user_id, deleted=0)
 
     async def update_avatar(self, db: AsyncSession, user_id: int, avatar: str) -> int:
         """
@@ -142,7 +155,7 @@ class CRUDUser(CRUDPlus[User]):
         :param avatar: 头像地址
         :return:
         """
-        return await self.update_model(db, user_id, {'avatar': avatar})
+        return await self.update_model_by_column(db, {'avatar': avatar}, id=user_id, deleted=0)
 
     async def update_email(self, db: AsyncSession, user_id: int, email: str) -> int:
         """
@@ -153,7 +166,7 @@ class CRUDUser(CRUDPlus[User]):
         :param email: 邮箱
         :return:
         """
-        return await self.update_model(db, user_id, {'email': email})
+        return await self.update_model_by_column(db, {'email': email}, id=user_id, deleted=0)
 
     async def reset_password(self, db: AsyncSession, pk: int, password: str) -> int:
         """
@@ -166,7 +179,7 @@ class CRUDUser(CRUDPlus[User]):
         """
         salt = bcrypt.gensalt()
         new_pwd = get_hash_password(password, salt)
-        return await self.update_model(db, pk, {'password': new_pwd, 'salt': salt}, flush=True)
+        return await self.update_model_by_column(db, {'password': new_pwd, 'salt': salt}, flush=True, id=pk, deleted=0)
 
     async def set_super(self, db: AsyncSession, user_id: int, *, is_super: bool) -> int:
         """
@@ -177,7 +190,7 @@ class CRUDUser(CRUDPlus[User]):
         :param is_super: 是否超级管理员
         :return:
         """
-        return await self.update_model(db, user_id, {'is_superuser': is_super})
+        return await self.update_model_by_column(db, {'is_superuser': is_super}, id=user_id, deleted=0)
 
     async def set_staff(self, db: AsyncSession, user_id: int, *, is_staff: bool) -> int:
         """
@@ -188,7 +201,7 @@ class CRUDUser(CRUDPlus[User]):
         :param is_staff: 是否可登录后台
         :return:
         """
-        return await self.update_model(db, user_id, {'is_staff': is_staff})
+        return await self.update_model_by_column(db, {'is_staff': is_staff}, id=user_id, deleted=0)
 
     async def set_status(self, db: AsyncSession, user_id: int, status: int) -> int:
         """
@@ -199,7 +212,7 @@ class CRUDUser(CRUDPlus[User]):
         :param status: 状态
         :return:
         """
-        return await self.update_model(db, user_id, {'status': status})
+        return await self.update_model_by_column(db, {'status': status}, id=user_id, deleted=0)
 
     async def set_multi_login(self, db: AsyncSession, user_id: int, *, multi_login: bool) -> int:
         """
@@ -210,7 +223,7 @@ class CRUDUser(CRUDPlus[User]):
         :param multi_login: 是否允许多端登录
         :return:
         """
-        return await self.update_model(db, user_id, {'is_multi_login': multi_login})
+        return await self.update_model_by_column(db, {'is_multi_login': multi_login}, id=user_id, deleted=0)
 
     async def delete(self, db: AsyncSession, user_id: int) -> int:
         """
@@ -220,7 +233,16 @@ class CRUDUser(CRUDPlus[User]):
         :param user_id: 用户 ID
         :return:
         """
-        return await self.delete_model(db, user_id)
+        return await self.delete_model_by_column(
+            db,
+            logical_deletion=True,
+            deleted_flag_column='deleted',
+            deleted_flag_value=self.model.id,
+            deleted_at_column='deleted_time',
+            deleted_at_factory=timezone.now(),
+            id=user_id,
+            deleted=0,
+        )
 
 
 user_dao: CRUDUser = CRUDUser(User)

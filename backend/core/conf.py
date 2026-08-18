@@ -4,7 +4,7 @@ from functools import cache
 from re import Pattern
 from typing import Any, Literal
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
 from backend.core.path_conf import ENV_EXAMPLE_FILE_PATH, ENV_FILE_PATH
@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     DATABASE_PORT: int
     DATABASE_USER: str
     DATABASE_PASSWORD: str
+    DATABASE_SOURCES: dict[str, str] = Field(default_factory=dict)
 
     # 数据库
     DATABASE_ECHO: bool | Literal['debug'] = False
@@ -99,6 +100,7 @@ class Settings(BaseSettings):
     TOKEN_EXTRA_INFO_REDIS_PREFIX: str = 'fba:token_extra_info'
     TOKEN_ONLINE_REDIS_PREFIX: str = 'fba:token_online'
     TOKEN_REFRESH_REDIS_PREFIX: str = 'fba:refresh_token'
+    TOKEN_REQUEST_UNDERLYING_SECURITY: bool = True
     TOKEN_REQUEST_PATH_EXCLUDE: list[str] = [  # JWT 路由白名单
         f'{FASTAPI_API_V1_PATH}/auth/login',
     ]
