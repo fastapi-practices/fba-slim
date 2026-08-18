@@ -1,6 +1,6 @@
-from collections.abc import Awaitable, Callable
 from asyncio import Lock
 from collections import OrderedDict
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from hashlib import sha256
 from inspect import isawaitable
