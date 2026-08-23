@@ -4,6 +4,12 @@
 
 简体中文 | [English](./README.md)
 
+> [!CAUTION]
+> 此版本已弃用
+
+> [!WARNING]
+> 最新实现位于 **[slim](https://github.com/fastapi-practices/fastapi_best_architecture/tree/slim)**
+
 ## 完整版
 
 如需包含所有功能的完整版本（Celery、SocketIO 等），请访问：
